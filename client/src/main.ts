@@ -1,22 +1,42 @@
-import type { GameState, PlayerAction, RegionId } from '../../shared/src/types';
-import { socket } from './ws';
-import { renderMap, attachMapClickHandler, initMap, type MapController } from './map';
-import { renderSidebar, renderCityPopup, renderCureModal, renderDiscardModal, renderGameOver, renderHelpOverlay } from './ui';
+import type { GameState, PlayerAction, RegionId } from "../../shared/src/types";
+import { socket } from "./ws";
+import {
+  renderMap,
+  attachMapClickHandler,
+  initMap,
+  type MapController,
+} from "./map";
+import {
+  renderSidebar,
+  renderCityPopup,
+  renderCureModal,
+  renderDiscardModal,
+  renderGameOver,
+  renderHelpOverlay,
+} from "./ui";
+import { runEffects } from "./effects";
+import { sound, unlockAudio, isMuted, toggleMuted } from "./sound";
 
-const app = document.getElementById('app')!;
+const app = document.getElementById("app")!;
 
-let screen: 'lobby' | 'game' = 'lobby';
+let screen: "lobby" | "game" = "lobby";
 let gameState: GameState | null = null;
-let myPlayerId: string | null = localStorage.getItem('op_player_id');
-let roomId: string | null = localStorage.getItem('op_room_id');
-let playerName: string = localStorage.getItem('op_player_name') || '';
+let myPlayerId: string | null = localStorage.getItem("op_player_id");
+let roomId: string | null = localStorage.getItem("op_room_id");
+let playerName: string = localStorage.getItem("op_player_name") || "";
 let errorMsg: string | null = null;
 let selectedCity: string | null = null;
-let connStatus: 'connecting' | 'open' | 'closed' = 'connecting';
+let connStatus: "connecting" | "open" | "closed" = "connecting";
 
 function dispatch(action: PlayerAction) {
   if (!gameState || !myPlayerId) return;
-  socket.send({ type: 'player_action', roomId: gameState.roomId, playerId: myPlayerId, action });
+  sound.action();
+  socket.send({
+    type: "player_action",
+    roomId: gameState.roomId,
+    playerId: myPlayerId,
+    action,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -24,55 +44,74 @@ function dispatch(action: PlayerAction) {
 // ---------------------------------------------------------------------------
 
 function renderLobbyScreen() {
-  const inLobbyRoom = gameState && gameState.phase === 'lobby';
+  const inLobbyRoom = gameState && gameState.phase === "lobby";
 
   app.innerHTML = `
     <div class="lobby-screen">
       <div class="lobby-card">
         <h1>🧬 Outbreak Protocol</h1>
         <p class="tagline">Cooperative global outbreak response — 2 to 4 players.</p>
-        ${errorMsg ? `<div class="error-banner">${errorMsg}</div>` : ''}
-        ${!inLobbyRoom ? `
+        ${errorMsg ? `<div class="error-banner">${errorMsg}</div>` : ""}
+        ${
+          !inLobbyRoom
+            ? `
           <div class="field">
             <label>Your name</label>
             <input id="name-input" type="text" value="${playerName}" placeholder="Agent Smith" maxlength="24" />
           </div>
           <div class="field">
             <label>Room code</label>
-            <input id="room-input" type="text" value="${roomId ?? ''}" placeholder="e.g. bravo-19" maxlength="24" />
+            <input id="room-input" type="text" value="${roomId ?? ""}" placeholder="e.g. bravo-19" maxlength="24" />
           </div>
           <button class="btn-primary" id="join-btn">Join / Create Room</button>
-        ` : `
+        `
+            : `
           <p style="color:var(--text-dim); font-size:13px;">Room: <b style="color:var(--text)">${gameState!.roomId}</b> — share this code with your team.</p>
           <div class="lobby-players">
-            ${gameState!.players.map((p) => `
-              <div class="lobby-player-row ${p.connected ? '' : 'offline'}">
-                <span><span class="dot"></span>${p.name}${p.id === myPlayerId ? ' (you)' : ''}</span>
-                <span style="color:var(--text-dim); font-size:11px;">${p.connected ? 'connected' : 'offline'}</span>
-              </div>`).join('')}
+            ${gameState!.players
+              .map(
+                (p) => `
+              <div class="lobby-player-row ${p.connected ? "" : "offline"}">
+                <span><span class="dot"></span>${p.name}${p.id === myPlayerId ? " (you)" : ""}</span>
+                <span style="color:var(--text-dim); font-size:11px;">${p.connected ? "connected" : "offline"}</span>
+              </div>`,
+              )
+              .join("")}
           </div>
-          <button class="btn-primary" id="start-btn" ${gameState!.players.length < 2 ? 'disabled' : ''}>
-            ${gameState!.players.length < 2 ? 'Need 2+ players' : 'Start Game'}
+          <button class="btn-primary" id="start-btn" ${gameState!.players.length < 2 ? "disabled" : ""}>
+            ${gameState!.players.length < 2 ? "Need 2+ players" : "Start Game"}
           </button>
-        `}
+        `
+        }
       </div>
     </div>
   `;
 
-  document.getElementById('join-btn')?.addEventListener('click', () => {
-    const name = (document.getElementById('name-input') as HTMLInputElement).value.trim() || 'Agent';
-    const room = (document.getElementById('room-input') as HTMLInputElement).value.trim().toLowerCase() || 'default';
+  document.getElementById("join-btn")?.addEventListener("click", () => {
+    const name =
+      (
+        document.getElementById("name-input") as HTMLInputElement
+      ).value.trim() || "Agent";
+    const room =
+      (document.getElementById("room-input") as HTMLInputElement).value
+        .trim()
+        .toLowerCase() || "default";
     playerName = name;
     roomId = room;
-    localStorage.setItem('op_player_name', name);
-    localStorage.setItem('op_room_id', room);
+    localStorage.setItem("op_player_name", name);
+    localStorage.setItem("op_room_id", room);
     errorMsg = null;
-    socket.send({ type: 'join_room', roomId: room, playerName: name, playerId: myPlayerId ?? undefined });
+    socket.send({
+      type: "join_room",
+      roomId: room,
+      playerName: name,
+      playerId: myPlayerId ?? undefined,
+    });
   });
 
-  document.getElementById('start-btn')?.addEventListener('click', () => {
+  document.getElementById("start-btn")?.addEventListener("click", () => {
     if (!gameState) return;
-    socket.send({ type: 'start_game', roomId: gameState.roomId });
+    socket.send({ type: "start_game", roomId: gameState.roomId });
   });
 }
 
@@ -92,12 +131,14 @@ function buildGameShellOnce() {
         <span class="topbar-mid">
           <span class="legend" id="legend"></span>
           <button class="help-btn" id="help-btn" title="How to play">?</button>
+          <button class="mute-btn" id="mute-btn" title="Mute sound"></button>
         </span>
         <span class="conn-status"><span class="conn-dot" id="conn-dot"></span><span id="conn-text">connected</span></span>
       </div>
       <div class="map-wrap" id="map-wrap">
         <svg id="board-svg"></svg>
         <div class="city-popup" id="city-popup" style="display:none;"></div>
+        <div class="fx-banner" id="fx-banner"></div>
         <div class="map-controls">
           <button id="zoom-in-btn" title="Zoom in">+</button>
           <button id="zoom-out-btn" title="Zoom out">−</button>
@@ -111,20 +152,36 @@ function buildGameShellOnce() {
     <div class="help-overlay" id="help-overlay" style="display:none;"></div>
     <div class="gameover-overlay" id="gameover-overlay" style="display:none;"></div>
   `;
-  const svg = document.getElementById('board-svg') as unknown as SVGSVGElement;
-  const wrap = document.getElementById('map-wrap') as HTMLElement;
+  const svg = document.getElementById("board-svg") as unknown as SVGSVGElement;
+  const wrap = document.getElementById("map-wrap") as HTMLElement;
   attachMapClickHandler(svg, onCityClick);
   mapController = initMap(svg, wrap);
 
-  document.getElementById('zoom-in-btn')?.addEventListener('click', () => mapController?.zoomIn());
-  document.getElementById('zoom-out-btn')?.addEventListener('click', () => mapController?.zoomOut());
-  document.getElementById('zoom-reset-btn')?.addEventListener('click', () => mapController?.resetView());
-  document.getElementById('help-btn')?.addEventListener('click', () => {
-    const overlay = document.getElementById('help-overlay')!;
+  document
+    .getElementById("zoom-in-btn")
+    ?.addEventListener("click", () => mapController?.zoomIn());
+  document
+    .getElementById("zoom-out-btn")
+    ?.addEventListener("click", () => mapController?.zoomOut());
+  document
+    .getElementById("zoom-reset-btn")
+    ?.addEventListener("click", () => mapController?.resetView());
+  document.getElementById("help-btn")?.addEventListener("click", () => {
+    const overlay = document.getElementById("help-overlay")!;
     renderHelpOverlay(overlay, () => {
-      overlay.style.display = 'none';
-      overlay.innerHTML = '';
+      overlay.style.display = "none";
+      overlay.innerHTML = "";
     });
+  });
+  const muteBtn = document.getElementById("mute-btn") as HTMLButtonElement;
+  const syncMuteBtn = () => {
+    muteBtn.textContent = isMuted() ? "🔇" : "🔊";
+    muteBtn.title = isMuted() ? "Unmute sound" : "Mute sound";
+  };
+  syncMuteBtn();
+  muteBtn.addEventListener("click", () => {
+    toggleMuted();
+    syncMuteBtn();
   });
 
   gameShellBuilt = true;
@@ -132,38 +189,61 @@ function buildGameShellOnce() {
 
 function closePopup() {
   selectedCity = null;
-  const popup = document.getElementById('city-popup');
-  if (popup) { popup.style.display = 'none'; popup.innerHTML = ''; }
-  if (gameState) renderMap(document.getElementById('board-svg') as unknown as SVGSVGElement, gameState, myPlayerId, selectedCity);
+  const popup = document.getElementById("city-popup");
+  if (popup) {
+    popup.style.display = "none";
+    popup.innerHTML = "";
+  }
+  if (gameState)
+    renderMap(
+      document.getElementById("board-svg") as unknown as SVGSVGElement,
+      gameState,
+      myPlayerId,
+      selectedCity,
+    );
 }
 
 function onCureNeeded(region: RegionId) {
   if (!gameState || !myPlayerId) return;
-  const overlay = document.getElementById('discard-overlay')!;
+  const overlay = document.getElementById("discard-overlay")!;
   renderCureModal(overlay, gameState, myPlayerId, region, dispatch, () => {
-    overlay.style.display = 'none';
-    overlay.innerHTML = '';
+    overlay.style.display = "none";
+    overlay.innerHTML = "";
   });
 }
 
 function onCityClick(cityId: string, evt: MouseEvent) {
   if (!gameState || !myPlayerId) return;
   selectedCity = cityId;
-  const wrap = document.getElementById('map-wrap')!;
+  const wrap = document.getElementById("map-wrap")!;
   const rect = wrap.getBoundingClientRect();
   let x = evt.clientX - rect.left + 14;
   let y = evt.clientY - rect.top + 14;
   x = Math.min(x, rect.width - 240);
   y = Math.min(y, rect.height - 260);
 
-  const popup = document.getElementById('city-popup')!;
-  popup.style.display = 'block';
-  renderCityPopup(popup, gameState, myPlayerId, cityId, { x, y }, dispatch, closePopup, onCureNeeded);
-  renderMap(document.getElementById('board-svg') as unknown as SVGSVGElement, gameState, myPlayerId, selectedCity);
+  const popup = document.getElementById("city-popup")!;
+  popup.style.display = "block";
+  renderCityPopup(
+    popup,
+    gameState,
+    myPlayerId,
+    cityId,
+    { x, y },
+    dispatch,
+    closePopup,
+    onCureNeeded,
+  );
+  renderMap(
+    document.getElementById("board-svg") as unknown as SVGSVGElement,
+    gameState,
+    myPlayerId,
+    selectedCity,
+  );
 }
 
 function renderLegend() {
-  const legend = document.getElementById('legend');
+  const legend = document.getElementById("legend");
   if (!legend) return;
   legend.innerHTML = `
     <span class="item"><span class="swatch-sm" style="background:#3b82f6"></span>Azure</span>
@@ -177,16 +257,36 @@ function renderGameScreen() {
   buildGameShellOnce();
   if (!gameState || !myPlayerId) return;
   renderLegend();
-  renderMap(document.getElementById('board-svg') as unknown as SVGSVGElement, gameState, myPlayerId, selectedCity);
-  renderSidebar(document.getElementById('sidebar')!, gameState, myPlayerId, dispatch);
-  renderDiscardModal(document.getElementById('discard-overlay')!, gameState, myPlayerId, dispatch);
-  renderGameOver(document.getElementById('gameover-overlay')!, gameState);
+  renderMap(
+    document.getElementById("board-svg") as unknown as SVGSVGElement,
+    gameState,
+    myPlayerId,
+    selectedCity,
+  );
+  renderSidebar(
+    document.getElementById("sidebar")!,
+    gameState,
+    myPlayerId,
+    dispatch,
+  );
+  renderDiscardModal(
+    document.getElementById("discard-overlay")!,
+    gameState,
+    myPlayerId,
+    dispatch,
+  );
+  renderGameOver(document.getElementById("gameover-overlay")!, gameState);
 
-  const dot = document.getElementById('conn-dot');
-  const text = document.getElementById('conn-text');
+  const dot = document.getElementById("conn-dot");
+  const text = document.getElementById("conn-text");
   if (dot && text) {
-    dot.className = `conn-dot ${connStatus === 'open' ? '' : connStatus === 'connecting' ? 'connecting' : 'bad'}`;
-    text.textContent = connStatus === 'open' ? 'connected' : connStatus === 'connecting' ? 'reconnecting…' : 'disconnected';
+    dot.className = `conn-dot ${connStatus === "open" ? "" : connStatus === "connecting" ? "connecting" : "bad"}`;
+    text.textContent =
+      connStatus === "open"
+        ? "connected"
+        : connStatus === "connecting"
+          ? "reconnecting…"
+          : "disconnected";
   }
 }
 
@@ -195,7 +295,7 @@ function renderGameScreen() {
 // ---------------------------------------------------------------------------
 
 function render() {
-  if (screen === 'lobby') {
+  if (screen === "lobby") {
     if (gameShellBuilt) {
       mapController?.destroy();
       mapController = null;
@@ -209,24 +309,49 @@ function render() {
 
 socket.onStatus((s) => {
   connStatus = s;
-  if (screen === 'game') render();
+  if (screen === "game") render();
 });
 
 socket.onMessage((msg) => {
-  if (msg.type === 'joined') {
+  let prevState: GameState | null = null;
+  let didStateUpdate = false;
+
+  if (msg.type === "joined") {
     myPlayerId = msg.playerId;
     roomId = msg.roomId;
-    localStorage.setItem('op_player_id', msg.playerId);
-    localStorage.setItem('op_room_id', msg.roomId);
+    localStorage.setItem("op_player_id", msg.playerId);
+    localStorage.setItem("op_room_id", msg.roomId);
     errorMsg = null;
-  } else if (msg.type === 'state_sync' || msg.type === 'state_diff') {
+  } else if (msg.type === "state_sync" || msg.type === "state_diff") {
+    prevState = gameState;
     gameState = msg.state;
-    screen = gameState.phase === 'lobby' ? 'lobby' : 'game';
-  } else if (msg.type === 'error') {
+    screen = gameState.phase === "lobby" ? "lobby" : "game";
+    didStateUpdate = true;
+  } else if (msg.type === "error") {
     errorMsg = msg.message;
   }
+
   render();
+
+  if (didStateUpdate && gameState && screen === "game") {
+    const svg = document.getElementById(
+      "board-svg",
+    ) as unknown as SVGSVGElement | null;
+    const banner = document.getElementById("fx-banner") as HTMLElement | null;
+    if (svg && banner) runEffects(svg, banner, prevState, gameState);
+    if (prevState && prevState.phase === "playing" && gameState.phase === "won")
+      sound.win();
+    if (
+      prevState &&
+      prevState.phase === "playing" &&
+      gameState.phase === "lost"
+    )
+      sound.lose();
+  }
 });
+
+// AudioContext needs a user gesture to start — grab the first one, anywhere.
+window.addEventListener("pointerdown", unlockAudio, { once: true });
 
 socket.connect();
 render();
@@ -234,6 +359,11 @@ render();
 // Auto-rejoin if we have a persisted session
 if (myPlayerId && roomId && playerName) {
   setTimeout(() => {
-    socket.send({ type: 'join_room', roomId: roomId!, playerName, playerId: myPlayerId ?? undefined });
+    socket.send({
+      type: "join_room",
+      roomId: roomId!,
+      playerName,
+      playerId: myPlayerId ?? undefined,
+    });
   }, 300);
 }
