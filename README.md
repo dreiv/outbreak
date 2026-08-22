@@ -1,88 +1,37 @@
 # Outbreak Protocol
 
-A browser-playable, cooperative disease-outbreak-control game for 2–4 players.
-Original names, original 44-city map, original card flavor — inspired by the
-"stop the outbreaks" genre of cooperative board games, not a reproduction of
-any specific publisher's board, art, or card text.
+A browser-playable, cooperative strategy game for 2–4 players. Inspired by classic disease-control board games, players must coordinate their unique skills to halt global infections, discover cures, and save humanity before time runs out.
 
-## Quick start
+## Quick Start & Network Play
 
-Requires Node.js 18+.
+Requires Node.js 18+. To start both the Vite client and the WebSocket server locally using Turborepo, run:
 
 ```bash
 npm install
 npm run dev
-```
-
-This uses **Turborepo** to start both halves of the app at once:
-
-- `outbreak-server` — the WebSocket game server, on `ws://localhost:8787`
-- `outbreak-client` — the Vite dev server, on `http://localhost:5173`
-
-Open `http://localhost:5173` in a browser tab per player (or share the URL
-across your network — see "Playing across devices" below). Enter a name and
-a room code; everyone who enters the same room code joins the same game.
-Once 2–4 players are in the lobby, anyone can hit **Start Game**.
-
-## Playing across devices / with friends
-
-By default the client talks to `ws://<the page's hostname>:8787`, so if you
-run `npm run dev` on a machine reachable on your LAN, other players can visit
-`http://<your-lan-ip>:5173` and it'll just work. For a real deployment,
-put the server behind a domain/TLS and set `VITE_WS_URL` (e.g. in a
-`client/.env` file: `VITE_WS_URL=wss://your-domain/ws`) before building the
-client.
-
-## How it plays
-
-- **Board**: 44 real-world cities across 4 regions (Azure, Crimson, Amber,
-  Verdant), connected by a hand-authored network of plausible travel routes.
-  Not a reproduction of any commercial board's exact city list or layout.
-- **4 actions per turn**: drive/ferry, direct flight (discard a matching city
-  card), charter flight (discard your current city's card, fly anywhere),
-  shuttle flight (between two research stations), treat a disease, build a
-  research station, share knowledge, or discover a cure.
-- **After your actions**: you draw 2 cards (watch out for Epidemics — they
-  raise the infection rate, infect a new city hard, and reshuffle the
-  infection discard pile back on top of the deck), then the board infects
-  cities equal to the current infection rate. A city that would take a 4th
-  cube of a color **outbreaks** instead, spreading to every neighbor
-  (chain reactions are tracked to avoid infinite loops).
-- **Roles**: 7 original roles are dealt at random — Logistics Chief, Field
-  Medic, Virologist, Courier, Liaison Officer, Archivist, Quartermaster —
-  each with one special ability, shown in the sidebar once assigned.
-- **Win**: cure all 4 strains. **Lose**: the outbreak counter maxes out, a
-  disease's cube supply runs out, or the player deck runs out.
-
-Click any city on the map — it shows only the actions that are actually
-legal from that city given your current position, hand, and turn state.
-
-## Architecture
 
 ```
-/shared   TypeScript types + board data, imported by both server and client
-          so message/action shapes can't drift between them.
-/server   Node.js + ws WebSocket server. Holds the single authoritative
-          GameState per room, in-memory. Validates and applies every action
-          server-side — clients never resolve game logic themselves.
-/client   Vite + TypeScript. Renders the board as an inline SVG (clickable
-          city nodes), plus a sidebar for hand/roles/cure status/log.
-```
 
-**Limitation, by design**: game rooms live entirely in server memory — there
-is no database. A room's state is lost if the server process restarts, and a
-room is torn down once everyone has been disconnected for longer than the
-2-minute reconnect grace period. This is fine for the small (2–4 player),
-short-lived sessions this game is built for, but it means this isn't
-suitable for long-running or persistent games without adding real storage.
+Open `http://localhost:5173` in a browser (one tab per player). Enter a name and a shared room code to join the lobby. Once everyone is in, anyone can hit **Start Game**.
 
-The `state_diff` WebSocket message currently sends the *full* game state on
-every change rather than a true incremental diff — simplest correct thing
-for a small in-memory state object; worth revisiting if the state grows.
+> **Playing with friends:** By default, the client connects to `ws://<the page's hostname>:8787`. If you run this on your LAN, friends can join via `http://<your-lan-ip>:5173`. For a real deployment, put the server behind a domain and set the `VITE_WS_URL` environment variable before building the client.
 
-## Scripts
+## Gameplay Mechanics
 
-- `npm run dev` — start server + client together via Turborepo
-- `npm run build` — production build both packages
-- `npm install --workspace server && npm start --workspace server` — run the
-  built server standalone (after `npm run build`)
+Navigate the interactive SVG map by clicking any city—the UI will intelligently display only the legal actions available based on your hand, position, and turn state.
+
+- **The Board:** Travel across 44 globally distributed cities spanning 4 distinct regions (Azure, Crimson, Amber, Verdant).
+- **Your Turn:** Spend up to 4 actions to move (drive/ferry, direct flight, charter flight, or shuttle), treat diseases, build research stations, share knowledge, or discover a cure.
+- **Escalating Threat:** After acting, draw 2 cards. Beware of Epidemics that accelerate infection rates and intensify the crisis. The board then infects cities—if a city receives a 4th disease cube, it triggers a cascading **outbreak** into neighboring cities.
+- **Unique Roles:** Players are randomly assigned one of 7 distinct specialists (e.g., Field Medic, Virologist, Logistics Chief), each bringing a crucial passive ability to the team.
+- **Win or Lose:** Victory is achieved by curing all 4 disease strains. You lose if the outbreak counter maxes out, a disease cube supply is exhausted, or the player deck runs empty.
+
+## Architecture & Scripts
+
+The game relies on an authoritative server model where clients never resolve game logic. Rooms live entirely in server memory; they are safely torn down once everyone has been disconnected past a 2-minute grace period.
+
+- `/shared`: TypeScript types and board data imported by both client and server to prevent state drift.
+- `/server`: Node.js + WebSocket server holding the authoritative, in-memory GameState per room.
+- `/client`: Vite + TypeScript frontend rendering the interactive SVG board and game UI.
+
+To build and run for production, use `npm run build`, then run `npm start --workspace server`.
