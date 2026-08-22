@@ -1,7 +1,7 @@
 import type { GameState, PlayerAction, RegionId } from '../../shared/src/types';
 import { socket } from './ws';
-import { renderMap, attachMapClickHandler } from './map';
-import { renderSidebar, renderCityPopup, renderCureModal, renderDiscardModal, renderGameOver } from './ui';
+import { renderMap, attachMapClickHandler, initMap, type MapController } from './map';
+import { renderSidebar, renderCityPopup, renderCureModal, renderDiscardModal, renderGameOver, renderHelpOverlay } from './ui';
 
 const app = document.getElementById('app')!;
 
@@ -81,6 +81,7 @@ function renderLobbyScreen() {
 // ---------------------------------------------------------------------------
 
 let gameShellBuilt = false;
+let mapController: MapController | null = null;
 
 function buildGameShellOnce() {
   if (gameShellBuilt) return;
@@ -88,20 +89,44 @@ function buildGameShellOnce() {
     <div class="game-shell">
       <div class="topbar">
         <span class="brand">🧬 OUTBREAK PROTOCOL</span>
-        <span class="legend" id="legend"></span>
+        <span class="topbar-mid">
+          <span class="legend" id="legend"></span>
+          <button class="help-btn" id="help-btn" title="How to play">?</button>
+        </span>
         <span class="conn-status"><span class="conn-dot" id="conn-dot"></span><span id="conn-text">connected</span></span>
       </div>
       <div class="map-wrap" id="map-wrap">
         <svg id="board-svg"></svg>
         <div class="city-popup" id="city-popup" style="display:none;"></div>
+        <div class="map-controls">
+          <button id="zoom-in-btn" title="Zoom in">+</button>
+          <button id="zoom-out-btn" title="Zoom out">−</button>
+          <button id="zoom-reset-btn" title="Reset view">⤾</button>
+        </div>
+        <div class="map-hint">Scroll / pinch to zoom · drag to pan</div>
       </div>
       <div class="sidebar" id="sidebar"></div>
     </div>
     <div class="discard-overlay" id="discard-overlay" style="display:none;"></div>
+    <div class="help-overlay" id="help-overlay" style="display:none;"></div>
     <div class="gameover-overlay" id="gameover-overlay" style="display:none;"></div>
   `;
   const svg = document.getElementById('board-svg') as unknown as SVGSVGElement;
+  const wrap = document.getElementById('map-wrap') as HTMLElement;
   attachMapClickHandler(svg, onCityClick);
+  mapController = initMap(svg, wrap);
+
+  document.getElementById('zoom-in-btn')?.addEventListener('click', () => mapController?.zoomIn());
+  document.getElementById('zoom-out-btn')?.addEventListener('click', () => mapController?.zoomOut());
+  document.getElementById('zoom-reset-btn')?.addEventListener('click', () => mapController?.resetView());
+  document.getElementById('help-btn')?.addEventListener('click', () => {
+    const overlay = document.getElementById('help-overlay')!;
+    renderHelpOverlay(overlay, () => {
+      overlay.style.display = 'none';
+      overlay.innerHTML = '';
+    });
+  });
+
   gameShellBuilt = true;
 }
 
@@ -171,6 +196,10 @@ function renderGameScreen() {
 
 function render() {
   if (screen === 'lobby') {
+    if (gameShellBuilt) {
+      mapController?.destroy();
+      mapController = null;
+    }
     gameShellBuilt = false;
     renderLobbyScreen();
   } else {

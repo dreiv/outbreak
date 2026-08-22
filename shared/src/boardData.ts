@@ -4,64 +4,79 @@ interface RawCity {
   id: string;
   name: string;
   region: RegionId;
-  x: number;
-  y: number;
+  lat: number;
+  lon: number;
+  major?: boolean;
 }
 
-// Coordinates are hand-placed on a 1000x520 equirectangular-style canvas —
-// approximate real-world positions, not to-scale cartography.
+// The map canvas is a true 2:1 equirectangular projection (see `project()`
+// below). Every city's x/y is derived from its real lat/lon so a real-world
+// landmass layer (client/src/worldLand.ts, generated with the same
+// projection) lines up with the board without any manual fudging.
+export const MAP_WIDTH = 1000;
+export const MAP_HEIGHT = 500;
+
+export function project(lat: number, lon: number): { x: number; y: number } {
+  const x = ((lon + 180) / 360) * MAP_WIDTH;
+  const y = ((90 - lat) / 180) * MAP_HEIGHT;
+  return { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 };
+}
+
+// `major: true` marks the handful of cities shown at low zoom so the board
+// isn't a wall of illegible text when zoomed all the way out; every city's
+// label reveals once the player zooms in on that region.
 const RAW_CITIES: RawCity[] = [
   // Azure — North America & Western Europe
-  { id: 'new-york', name: 'New York', region: 'azure', x: 250, y: 175 },
-  { id: 'chicago', name: 'Chicago', region: 'azure', x: 228, y: 160 },
-  { id: 'los-angeles', name: 'Los Angeles', region: 'azure', x: 148, y: 195 },
-  { id: 'mexico-city', name: 'Mexico City', region: 'azure', x: 195, y: 235 },
-  { id: 'toronto', name: 'Toronto', region: 'azure', x: 244, y: 152 },
-  { id: 'washington', name: 'Washington', region: 'azure', x: 254, y: 182 },
-  { id: 'london', name: 'London', region: 'azure', x: 480, y: 128 },
-  { id: 'madrid', name: 'Madrid', region: 'azure', x: 470, y: 162 },
-  { id: 'paris', name: 'Paris', region: 'azure', x: 490, y: 134 },
-  { id: 'milan', name: 'Milan', region: 'azure', x: 502, y: 145 },
-  { id: 'essen', name: 'Essen', region: 'azure', x: 495, y: 122 },
-  { id: 'st-petersburg', name: 'St. Petersburg', region: 'azure', x: 542, y: 98 },
+  { id: 'new-york', name: 'New York', region: 'azure', lat: 40.7128, lon: -74.0060, major: true },
+  { id: 'chicago', name: 'Chicago', region: 'azure', lat: 41.8781, lon: -87.6298 },
+  { id: 'los-angeles', name: 'Los Angeles', region: 'azure', lat: 34.0522, lon: -118.2437 },
+  { id: 'mexico-city', name: 'Mexico City', region: 'azure', lat: 19.4326, lon: -99.1332, major: true },
+  { id: 'toronto', name: 'Toronto', region: 'azure', lat: 43.6511, lon: -79.3830 },
+  { id: 'washington', name: 'Washington', region: 'azure', lat: 38.9072, lon: -77.0369 },
+  { id: 'london', name: 'London', region: 'azure', lat: 51.5074, lon: -0.1278, major: true },
+  { id: 'madrid', name: 'Madrid', region: 'azure', lat: 40.4168, lon: -3.7038 },
+  { id: 'paris', name: 'Paris', region: 'azure', lat: 48.8566, lon: 2.3522, major: true },
+  { id: 'milan', name: 'Milan', region: 'azure', lat: 45.4642, lon: 9.1900 },
+  { id: 'essen', name: 'Essen', region: 'azure', lat: 51.4556, lon: 7.0116 },
+  { id: 'st-petersburg', name: 'St. Petersburg', region: 'azure', lat: 59.9311, lon: 30.3609 },
 
   // Crimson — East & Southeast Asia
-  { id: 'beijing', name: 'Beijing', region: 'crimson', x: 742, y: 152 },
-  { id: 'shanghai', name: 'Shanghai', region: 'crimson', x: 762, y: 184 },
-  { id: 'hong-kong', name: 'Hong Kong', region: 'crimson', x: 750, y: 216 },
-  { id: 'taipei', name: 'Taipei', region: 'crimson', x: 772, y: 220 },
-  { id: 'seoul', name: 'Seoul', region: 'crimson', x: 780, y: 158 },
-  { id: 'tokyo', name: 'Tokyo', region: 'crimson', x: 822, y: 170 },
-  { id: 'osaka', name: 'Osaka', region: 'crimson', x: 806, y: 186 },
-  { id: 'bangkok', name: 'Bangkok', region: 'crimson', x: 710, y: 236 },
-  { id: 'ho-chi-minh-city', name: 'Ho Chi Minh City', region: 'crimson', x: 726, y: 250 },
-  { id: 'manila', name: 'Manila', region: 'crimson', x: 782, y: 246 },
-  { id: 'jakarta', name: 'Jakarta', region: 'crimson', x: 730, y: 292 },
+  { id: 'beijing', name: 'Beijing', region: 'crimson', lat: 39.9042, lon: 116.4074, major: true },
+  { id: 'shanghai', name: 'Shanghai', region: 'crimson', lat: 31.2304, lon: 121.4737 },
+  { id: 'hong-kong', name: 'Hong Kong', region: 'crimson', lat: 22.3193, lon: 114.1694 },
+  { id: 'taipei', name: 'Taipei', region: 'crimson', lat: 25.0330, lon: 121.5654 },
+  { id: 'seoul', name: 'Seoul', region: 'crimson', lat: 37.5665, lon: 126.9780 },
+  { id: 'tokyo', name: 'Tokyo', region: 'crimson', lat: 35.6762, lon: 139.6503, major: true },
+  { id: 'osaka', name: 'Osaka', region: 'crimson', lat: 34.6937, lon: 135.5023 },
+  { id: 'bangkok', name: 'Bangkok', region: 'crimson', lat: 13.7563, lon: 100.5018, major: true },
+  { id: 'ho-chi-minh-city', name: 'Ho Chi Minh City', region: 'crimson', lat: 10.8231, lon: 106.6297 },
+  { id: 'manila', name: 'Manila', region: 'crimson', lat: 14.5995, lon: 120.9842 },
+  { id: 'jakarta', name: 'Jakarta', region: 'crimson', lat: -6.2088, lon: 106.8456, major: true },
 
   // Amber — Latin America & Sub-Saharan Africa
-  { id: 'bogota', name: 'Bogotá', region: 'amber', x: 222, y: 292 },
-  { id: 'lima', name: 'Lima', region: 'amber', x: 206, y: 322 },
-  { id: 'santiago', name: 'Santiago', region: 'amber', x: 222, y: 402 },
-  { id: 'buenos-aires', name: 'Buenos Aires', region: 'amber', x: 252, y: 392 },
-  { id: 'sao-paulo', name: 'São Paulo', region: 'amber', x: 272, y: 342 },
-  { id: 'lagos', name: 'Lagos', region: 'amber', x: 492, y: 270 },
-  { id: 'kinshasa', name: 'Kinshasa', region: 'amber', x: 522, y: 300 },
-  { id: 'khartoum', name: 'Khartoum', region: 'amber', x: 546, y: 250 },
-  { id: 'johannesburg', name: 'Johannesburg', region: 'amber', x: 546, y: 362 },
-  { id: 'algiers', name: 'Algiers', region: 'amber', x: 496, y: 195 },
+  { id: 'bogota', name: 'Bogotá', region: 'amber', lat: 4.7110, lon: -74.0721 },
+  { id: 'lima', name: 'Lima', region: 'amber', lat: -12.0464, lon: -77.0428 },
+  { id: 'santiago', name: 'Santiago', region: 'amber', lat: -33.4489, lon: -70.6693 },
+  { id: 'buenos-aires', name: 'Buenos Aires', region: 'amber', lat: -34.6037, lon: -58.3816, major: true },
+  { id: 'sao-paulo', name: 'São Paulo', region: 'amber', lat: -23.5505, lon: -46.6333, major: true },
+  { id: 'lagos', name: 'Lagos', region: 'amber', lat: 6.5244, lon: 3.3792, major: true },
+  { id: 'kinshasa', name: 'Kinshasa', region: 'amber', lat: -4.4419, lon: 15.2663 },
+  { id: 'khartoum', name: 'Khartoum', region: 'amber', lat: 15.5007, lon: 32.5599 },
+  { id: 'johannesburg', name: 'Johannesburg', region: 'amber', lat: -26.2041, lon: 28.0473, major: true },
+  { id: 'algiers', name: 'Algiers', region: 'amber', lat: 36.7538, lon: 3.0588 },
 
   // Verdant — Middle East, South Asia & Oceania
-  { id: 'moscow', name: 'Moscow', region: 'verdant', x: 556, y: 108 },
-  { id: 'istanbul', name: 'Istanbul', region: 'verdant', x: 546, y: 170 },
-  { id: 'cairo', name: 'Cairo', region: 'verdant', x: 546, y: 212 },
-  { id: 'riyadh', name: 'Riyadh', region: 'verdant', x: 582, y: 212 },
-  { id: 'baghdad', name: 'Baghdad', region: 'verdant', x: 582, y: 186 },
-  { id: 'tehran', name: 'Tehran', region: 'verdant', x: 592, y: 176 },
-  { id: 'karachi', name: 'Karachi', region: 'verdant', x: 630, y: 206 },
-  { id: 'mumbai', name: 'Mumbai', region: 'verdant', x: 630, y: 232 },
-  { id: 'delhi', name: 'Delhi', region: 'verdant', x: 652, y: 196 },
-  { id: 'chennai', name: 'Chennai', region: 'verdant', x: 656, y: 252 },
-  { id: 'sydney', name: 'Sydney', region: 'verdant', x: 852, y: 404 },
+  { id: 'moscow', name: 'Moscow', region: 'verdant', lat: 55.7558, lon: 37.6173, major: true },
+  { id: 'istanbul', name: 'Istanbul', region: 'verdant', lat: 41.0082, lon: 28.9784 },
+  { id: 'cairo', name: 'Cairo', region: 'verdant', lat: 30.0444, lon: 31.2357, major: true },
+  { id: 'riyadh', name: 'Riyadh', region: 'verdant', lat: 24.7136, lon: 46.6753 },
+  { id: 'baghdad', name: 'Baghdad', region: 'verdant', lat: 33.3152, lon: 44.3661 },
+  { id: 'tehran', name: 'Tehran', region: 'verdant', lat: 35.6892, lon: 51.3890 },
+  { id: 'karachi', name: 'Karachi', region: 'verdant', lat: 24.8607, lon: 67.0011 },
+  { id: 'mumbai', name: 'Mumbai', region: 'verdant', lat: 19.0760, lon: 72.8777, major: true },
+  { id: 'delhi', name: 'Delhi', region: 'verdant', lat: 28.7041, lon: 77.1025 },
+  { id: 'chennai', name: 'Chennai', region: 'verdant', lat: 13.0827, lon: 80.2707 },
+  { id: 'sydney', name: 'Sydney', region: 'verdant', lat: -33.8688, lon: 151.2093, major: true },
 ];
 
 // Undirected edges — plausible travel/flight corridors. Both directions are
@@ -105,7 +120,18 @@ const EDGES: [string, string][] = [
 function buildCities(): CityDef[] {
   const map = new Map<string, CityDef>();
   for (const c of RAW_CITIES) {
-    map.set(c.id, { ...c, connections: [] });
+    const { x, y } = project(c.lat, c.lon);
+    map.set(c.id, {
+      id: c.id,
+      name: c.name,
+      region: c.region,
+      lat: c.lat,
+      lon: c.lon,
+      x,
+      y,
+      major: c.major ?? false,
+      connections: [],
+    });
   }
   for (const [a, b] of EDGES) {
     const ca = map.get(a);

@@ -9,8 +9,11 @@ export interface CityDef {
   id: string;
   name: string;
   region: RegionId;
-  x: number; // 0-1000 svg coordinate space
-  y: number; // 0-1000 svg coordinate space
+  lat: number; // degrees, -90..90
+  lon: number; // degrees, -180..180
+  x: number; // equirectangular projection of lat/lon onto a MAP_WIDTH x MAP_HEIGHT canvas (see boardData.ts)
+  y: number;
+  major: boolean; // shown at low zoom levels; other labels reveal on zoom-in
   connections: string[]; // city ids
 }
 
