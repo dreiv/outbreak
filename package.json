@@ -1,0 +1,17 @@
+{
+  "name": "outbreak-protocol",
+  "private": true,
+  "version": "1.0.0",
+  "packageManager": "npm@10.9.7",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build"
+  },
+  "devDependencies": {
+    "turbo": "^2.1.3"
+  }
+}
