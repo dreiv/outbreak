@@ -26,6 +26,15 @@ html,
 body {
   margin: 0;
   height: 100%;
+  /* The app owns the whole viewport and manages its own internal scroll
+     regions (.sidebar, .map-wrap) — the page itself should never scroll.
+     Without this, any small miscalculation in a descendant's box height
+     (or just a legend/topbar wrapping to an extra line on a narrow window)
+     lets the *whole page* scroll instead, which drags the topbar out of
+     view — the opposite of what "header always visible" means. Pinning
+     this here makes that impossible regardless of what else changes
+     downstream in the layout. */
+  overflow: hidden;
   background: var(--bg);
   color: var(--text);
   font-family:
@@ -36,7 +45,7 @@ body {
 }
 
 #app {
-  min-height: 100vh;
+  height: 100%;
   display: flex;
   flex-direction: column;
 }
@@ -49,6 +58,7 @@ body {
   align-items: center;
   justify-content: center;
   padding: 24px;
+  overflow-y: auto; /* body no longer scrolls (see html/body) — keep this screen self-contained too */
 }
 
 .lobby-card {
@@ -343,12 +353,17 @@ button {
 
 .city-node text.label {
   fill: var(--text);
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 600;
   pointer-events: none;
   font-family: inherit;
   opacity: 0;
   transition: opacity 0.15s;
+  /* No transform/transform-origin here — the whole node (this label
+     included) counter-scales as one unit via the parent .node-scale
+     group instead (see map.ts's applyNodeScale). That group shares the
+     same local (0,0) origin as this label's (x,y), so there's no
+     per-element pivot math left to get subtly wrong. */
 }
 /* Major cities always show; the rest reveal once you zoom in, otherwise a
    fully-zoomed-out board is an illegible wall of text (see map.ts). */
@@ -358,6 +373,21 @@ button {
 #map-wrap.zoomed-in .city-node text.label {
   opacity: 1;
 }
+
+.node-scale {
+  /* Deliberately NO `transform` CSS property here. Its scale is applied
+     imperatively via map.ts's applyNodeScale, which sets the `transform`
+     *attribute* (via setAttribute) rather than a CSS style — and per the
+     CSS Transforms spec, a `transform` declared in a stylesheet always
+     wins over one set as a plain SVG attribute, completely silencing it.
+     (This bit us once already in this codebase — see the discard/liaison
+     card-share fixes' notes on the same attribute-vs-CSS-property trap.)
+     Every marker's whole visual (pin, station ring, label, cube badges,
+     pawns) lives in here, so it all stays a constant, readable on-screen
+     size regardless of map zoom — the same way pins on any zoomable map
+     (Leaflet, Mapbox, Google Maps) don't balloon in size as you zoom in. */
+}
+
 
 .city-node.station .station-ring {
   fill: none;
@@ -377,9 +407,21 @@ button {
   stroke: var(--accent);
   opacity: 0.9;
 }
+.edge-line.shuttle {
+  /* Long-haul "wrap around the map" routes (LA<->Tokyo, LA<->Sydney) —
+     dashed to read as the odd-one-out long way round, same convention as
+     the physical Pandemic board's equivalent wrap-around connections. */
+  stroke-dasharray: 7 5;
+  stroke: #6b7a9e;
+  opacity: 0.75;
+}
+.edge-line.shuttle.legal {
+  stroke: var(--accent);
+  opacity: 0.95;
+}
 
 .cube-badge {
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 700;
   fill: #06101f;
 }
@@ -800,6 +842,34 @@ button {
   max-height: 82vh;
   overflow-y: auto;
 }
+.help-modal .close-btn {
+  /* Previously unstyled — it rendered as a plain default <button> sitting
+     inline before the "How to Play" heading instead of reading as a modal
+     dismiss control. Match the topbar's circular help-btn styling and pin
+     it to the corner, the conventional spot for a modal close button. */
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    color 0.15s;
+}
+.help-modal .close-btn:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
 .help-modal h3:first-of-type {
   margin-top: 0;
 }
@@ -991,5 +1061,13 @@ button {
     border-left: none;
     border-top: 1px solid var(--border);
     max-height: 40vh;
+  }
+  .legend {
+    /* The region-color key (Azure/Crimson/Amber/Verdant) is redundant with
+       the color-coded cube badges already on the map, and on a narrow
+       topbar it was competing for space with the brand/help/mute/connection
+       controls — too much crammed into too little width. Same info is
+       still available in the sidebar's disease-tracker section. */
+    display: none;
   }
 }

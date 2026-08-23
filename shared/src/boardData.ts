@@ -79,6 +79,28 @@ const RAW_CITIES: RawCity[] = [
   { id: 'sydney', name: 'Sydney', region: 'verdant', lat: -33.8688, lon: 151.2093, major: true },
 ];
 
+// "Shuttle" routes — long-haul ocean crossings with no plausible adjacent
+// land/short-flight path, connecting distant hubs the way the original
+// Pandemic board's dashed lines do (e.g. its Los Angeles<->Tokyo and
+// Los Angeles<->Sydney wrap-around connections). Functionally identical to
+// any other edge (Drive/Ferry works normally), but rendered as a dashed
+// line on the map instead of solid so they read as the "long way round"
+// rather than a regular adjacent hop — see EDGE_KEY / isShuttleEdge below
+// and client/src/map.ts.
+const SHUTTLE_EDGES: [string, string][] = [
+  ['los-angeles', 'tokyo'],
+  ['sydney', 'los-angeles'],
+];
+
+function edgeKey(a: string, b: string): string {
+  return [a, b].sort().join('|');
+}
+const SHUTTLE_EDGE_KEYS = new Set(SHUTTLE_EDGES.map(([a, b]) => edgeKey(a, b)));
+
+export function isShuttleEdge(a: string, b: string): boolean {
+  return SHUTTLE_EDGE_KEYS.has(edgeKey(a, b));
+}
+
 // Undirected edges — plausible travel/flight corridors. Both directions are
 // derived automatically below.
 const EDGES: [string, string][] = [
@@ -90,7 +112,8 @@ const EDGES: [string, string][] = [
   ['buenos-aires', 'sao-paulo'], ['sao-paulo', 'bogota'],
   // Trans-Atlantic / trans-Pacific hubs
   ['new-york', 'london'], ['washington', 'london'], ['sao-paulo', 'lagos'],
-  ['buenos-aires', 'johannesburg'], ['los-angeles', 'tokyo'], ['sydney', 'los-angeles'],
+  ['buenos-aires', 'johannesburg'],
+  ...SHUTTLE_EDGES,
   // Europe
   ['london', 'paris'], ['london', 'madrid'], ['paris', 'milan'], ['paris', 'essen'],
   ['essen', 'st-petersburg'], ['madrid', 'milan'], ['st-petersburg', 'moscow'],
