@@ -198,23 +198,18 @@ export function renderCityPopup(
       const shareTargets = state.players.filter((p) => p.id !== myId);
       for (const other of shareTargets) {
         const colocated = other.location === cityId;
-        const courierInvolved = me.role === "courier" || other.role === "courier";
-        // Normal rule: sharing requires being in the same city. Courier's
-        // whole ability is relaxing that — previously the popup only ever
-        // looked at players physically standing in this city, so a Courier
-        // sharing with someone elsewhere could never see a button at all.
+        const courierInvolved =
+          me.role === "courier" || other.role === "courier";
+        // Sharing needs same city, unless a Courier is involved (their ability
+        // relaxes that).
         if (!colocated && !courierInvolved) continue;
         const remoteTag = colocated ? "" : " (remote)";
         const flexible =
           me.role === "liaison-officer" || other.role === "liaison-officer";
 
         if (flexible) {
-          // Liaison Officer relaxes *which* card can be shared — any card,
-          // not just the one matching the current city. Previously the
-          // button appeared but always sent `cityCard: cityId` regardless,
-          // so unless that exact card happened to be in the giver's hand
-          // the share silently failed — the flexibility was never actually
-          // usable. Offer one button per card actually in the giver's hand.
+          // Liaison Officer can share *any* card, not just the current-city
+          // one — so offer a button per card actually in the giver's hand.
           for (const card of me.hand) {
             if (card.type !== "city") continue;
             addBtn(

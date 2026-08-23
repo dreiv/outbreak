@@ -1,6 +1,5 @@
-// Small procedural sound effects via WebAudio — no audio assets to bundle or
-// license. Everything is a handful of oscillator/gain nodes shaped into a
-// short envelope. Muted state persists in localStorage.
+// Procedural WebAudio SFX — no bundled assets. Mute state persists in
+// localStorage.
 
 const MUTE_KEY = "op_muted";
 
@@ -16,8 +15,8 @@ function getCtx(): AudioContext | null {
   return ctx;
 }
 
-// Must be called from within a user-gesture handler (click/tap) the first
-// time, or the browser will refuse to start the AudioContext.
+// Must be called from a user-gesture handler, or the browser refuses to
+// start the AudioContext.
 export function unlockAudio() {
   getCtx();
 }

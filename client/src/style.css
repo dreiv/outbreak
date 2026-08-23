@@ -26,14 +26,9 @@ html,
 body {
   margin: 0;
   height: 100%;
-  /* The app owns the whole viewport and manages its own internal scroll
-     regions (.sidebar, .map-wrap) — the page itself should never scroll.
-     Without this, any small miscalculation in a descendant's box height
-     (or just a legend/topbar wrapping to an extra line on a narrow window)
-     lets the *whole page* scroll instead, which drags the topbar out of
-     view — the opposite of what "header always visible" means. Pinning
-     this here makes that impossible regardless of what else changes
-     downstream in the layout. */
+  /* The app owns the viewport and scrolls internally (.sidebar, .map-wrap);
+     the page itself must never scroll, or the topbar gets dragged out of
+     view. */
   overflow: hidden;
   background: var(--bg);
   color: var(--text);
@@ -58,7 +53,7 @@ body {
   align-items: center;
   justify-content: center;
   padding: 24px;
-  overflow-y: auto; /* body no longer scrolls (see html/body) — keep this screen self-contained too */
+  overflow-y: auto; /* self-contained scroll (body doesn't scroll) */
 }
 
 .lobby-card {
@@ -215,10 +210,8 @@ button {
   grid-template-columns: 1fr 340px;
   grid-template-rows: auto 1fr;
   height: 100vh;
-  /* Grid items default to min-height:auto, so without this the sidebar's
-     own content (below) can force this row taller than the viewport,
-     which overflows onto the page and scrolls the topbar out of view
-     instead of scrolling inside the sidebar. */
+  /* Grid items default to min-height:auto; without this the sidebar content
+     can force the row taller than the viewport and push the topbar off. */
   min-height: 0;
 }
 
@@ -299,9 +292,9 @@ button {
 .map-wrap {
   position: relative;
   overflow: hidden;
-  min-height: 0; /* see .game-shell comment — same grid-row-overflow fix */
+  min-height: 0; /* same grid-row-overflow fix as .game-shell */
   background: radial-gradient(ellipse at center, #0e1830 0%, #070d18 100%);
-  touch-action: none; /* let panzoom fully own touch gestures (pinch/drag) */
+  touch-action: none; /* let panzoom own touch gestures (pinch/drag) */
 }
 
 .map-wrap svg {
@@ -359,14 +352,10 @@ button {
   font-family: inherit;
   opacity: 0;
   transition: opacity 0.15s;
-  /* No transform/transform-origin here — the whole node (this label
-     included) counter-scales as one unit via the parent .node-scale
-     group instead (see map.ts's applyNodeScale). That group shares the
-     same local (0,0) origin as this label's (x,y), so there's no
-     per-element pivot math left to get subtly wrong. */
+  /* No transform here — the whole node counter-scales as one unit via the
+     parent .node-scale group (see map.ts applyNodeScale). */
 }
-/* Major cities always show; the rest reveal once you zoom in, otherwise a
-   fully-zoomed-out board is an illegible wall of text (see map.ts). */
+/* Major cities always show; the rest reveal on zoom-in (see map.ts). */
 .city-node.major text.label {
   opacity: 1;
 }
@@ -375,19 +364,11 @@ button {
 }
 
 .node-scale {
-  /* Deliberately NO `transform` CSS property here. Its scale is applied
-     imperatively via map.ts's applyNodeScale, which sets the `transform`
-     *attribute* (via setAttribute) rather than a CSS style — and per the
-     CSS Transforms spec, a `transform` declared in a stylesheet always
-     wins over one set as a plain SVG attribute, completely silencing it.
-     (This bit us once already in this codebase — see the discard/liaison
-     card-share fixes' notes on the same attribute-vs-CSS-property trap.)
-     Every marker's whole visual (pin, station ring, label, cube badges,
-     pawns) lives in here, so it all stays a constant, readable on-screen
-     size regardless of map zoom — the same way pins on any zoomable map
-     (Leaflet, Mapbox, Google Maps) don't balloon in size as you zoom in. */
+  /* Deliberately NO `transform` CSS property — the scale is set as the
+     `transform` *attribute* by map.ts applyNodeScale, and a stylesheet
+     `transform` would override (silence) the attribute. Keeps every marker
+     a constant on-screen size regardless of zoom. */
 }
-
 
 .city-node.station .station-ring {
   fill: none;
@@ -408,9 +389,8 @@ button {
   opacity: 0.9;
 }
 .edge-line.shuttle {
-  /* Long-haul "wrap around the map" routes (LA<->Tokyo, LA<->Sydney) —
-     dashed to read as the odd-one-out long way round, same convention as
-     the physical Pandemic board's equivalent wrap-around connections. */
+  /* Long-haul wrap-around routes (LA<->Tokyo, LA<->Sydney) — dashed to read
+     as the long way round. */
   stroke-dasharray: 7 5;
   stroke: #6b7a9e;
   opacity: 0.75;
@@ -642,9 +622,7 @@ button {
   background: var(--panel);
   border-left: 1px solid var(--border);
   overflow-y: auto;
-  min-height: 0; /* let the grid row's 1fr size win so this scrolls
-                    internally instead of growing the page (and pushing
-                    the topbar off-screen) to fit the log/hand content */
+  min-height: 0; /* let the 1fr row win so this scrolls internally */
   padding: 14px;
   display: flex;
   flex-direction: column;
@@ -843,10 +821,7 @@ button {
   overflow-y: auto;
 }
 .help-modal .close-btn {
-  /* Previously unstyled — it rendered as a plain default <button> sitting
-     inline before the "How to Play" heading instead of reading as a modal
-     dismiss control. Match the topbar's circular help-btn styling and pin
-     it to the corner, the conventional spot for a modal close button. */
+  /* Pinned to the corner, the conventional modal close spot. */
   position: absolute;
   top: 12px;
   right: 12px;
@@ -1063,11 +1038,8 @@ button {
     max-height: 40vh;
   }
   .legend {
-    /* The region-color key (Azure/Crimson/Amber/Verdant) is redundant with
-       the color-coded cube badges already on the map, and on a narrow
-       topbar it was competing for space with the brand/help/mute/connection
-       controls — too much crammed into too little width. Same info is
-       still available in the sidebar's disease-tracker section. */
+    /* Redundant with the color-coded cube badges; no room in a narrow topbar.
+       Same info is in the sidebar's disease tracker. */
     display: none;
   }
 }

@@ -74,10 +74,8 @@ export function showBanner(
 }
 
 /**
- * Diffs `prev` -> `next` and fires map animations / sound / toast banners for
- * whatever changed: player travel, new infection cubes, outbreaks,
- * epidemics, and cures. Safe to call every time a new state arrives —
- * no-ops cleanly when there's nothing to diff against (first load / new room).
+ * Diffs `prev` -> `next` and fires animations / sound / banners for what
+ * changed. Safe to call on every state; no-ops with nothing to diff.
  */
 export function runEffects(
   svgEl: SVGSVGElement,
@@ -116,9 +114,7 @@ export function runEffects(
   for (const entry of newEntries) {
     if (/^Outbreak in .+! \(/.test(entry.text)) {
       sawOutbreak = true;
-      // Prefer the structured cityId the server now attaches to this log
-      // line over parsing it back out of the display name (which could
-      // silently collide if two cities ever shared a name).
+      // Prefer the structured cityId over parsing the display name.
       const city = entry.cityId ? CITY_MAP[entry.cityId] : undefined;
       if (city) {
         spawnPulse(fx, city, "outbreak");

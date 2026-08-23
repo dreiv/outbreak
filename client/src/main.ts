@@ -292,19 +292,18 @@ function renderGameScreen() {
           : "disconnected";
   }
 
-  // In-game errors (a rejected action — race condition, invalid move,
-  // out-of-turn — from the server's `error` message) previously only ever
-  // rendered on the lobby screen, so a rejected action mid-game gave zero
-  // feedback. Surface it as a dismissible toast here too.
+  // Surface rejected actions (server `error`) as a dismissible toast.
   const toast = document.getElementById("game-error-toast");
   if (toast) {
     if (errorMsg) {
       toast.style.display = "flex";
       toast.innerHTML = `<span>${escapeHtml(errorMsg)}</span><button id="error-toast-close" aria-label="Dismiss">✕</button>`;
-      document.getElementById("error-toast-close")?.addEventListener("click", () => {
-        errorMsg = null;
-        renderGameScreen();
-      });
+      document
+        .getElementById("error-toast-close")
+        ?.addEventListener("click", () => {
+          errorMsg = null;
+          renderGameScreen();
+        });
     } else {
       toast.style.display = "none";
       toast.innerHTML = "";

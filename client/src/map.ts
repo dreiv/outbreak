@@ -12,9 +12,7 @@ import { LAND_PATH } from "./worldLand";
 
 const PLAYER_COLORS = ["#f472b6", "#facc15", "#60a5fa", "#34d399"];
 
-// Below this zoom scale, only "major" cities show labels — otherwise a
-// fully-zoomed-out board is a wall of overlapping text. See `major` in
-// shared/src/boardData.ts.
+// Below this zoom, only "major" cities show labels (see boardData.ts).
 const LABEL_REVEAL_ZOOM = 1.6;
 
 function regionsWithCubes(
@@ -31,18 +29,10 @@ function shuttleStub(
   to: { x: number; y: number; name: string },
   isLegalMove: boolean,
 ): string {
-  // Shuttle edges exist specifically because the direct path between the
-  // two cities isn't the real-world short way round (see isShuttleEdge's
-  // doc comment) — so `from` always exits toward whichever map edge is
-  // *away* from `to`'s direct-line direction: if `to` sits to the right,
-  // the wrap-around path goes left off x=0, and vice versa.
+  // `from` exits toward the map edge *away* from `to`'s direct-line
+  // direction, so the wrap-around reads as the long way round.
   const edgeX = to.x > from.x ? 0 : MAP_WIDTH;
-  // Both cities' stubs end at the same height (their midpoint y, not
-  // `from`'s own y) so the two dashed stubs visually line up with each
-  // other across the two edges — e.g. Sydney sits much further south than
-  // LA, so ending each stub at its own city's latitude would send them off
-  // the map at two unrelated heights and they'd no longer read as "this
-  // connects to that" the way matching heights on opposite edges do.
+  // Both stubs end at the midpoint y so they line up across the two edges.
   const edgeY = (from.y + to.y) / 2;
   const classes = ["edge-line", "shuttle"];
   if (isLegalMove) classes.push("legal");
@@ -52,13 +42,9 @@ function shuttleStub(
     </line>`;
 }
 
-// ---------------------------------------------------------------------------
-// One-time setup: the static SVG structure (landmass + empty edge/node
-// groups) and the pan/zoom controller live for the lifetime of the game
-// screen. renderMap() below only ever touches the contents of `.edges` and
-// `.nodes` so the pan/zoom instance (and the user's current view) survives
-// every state update.
-// ---------------------------------------------------------------------------
+// One-time setup: the static SVG structure and pan/zoom controller live for
+// the lifetime of the game screen. renderMap() only touches `.edges`/`.nodes`
+// so the pan/zoom instance (and the user's view) survives every state update.
 
 export interface MapController {
   panzoom: PanZoom;
@@ -81,20 +67,13 @@ function attachPanzoom(
     minZoom: 1,
     maxZoom: 10,
     bounds: true,
-    // panzoom's bounds check only requires the content to still overlap a
-    // window this fraction in from each edge of the *container* — with the
-    // previous 0.15 that window is a loose [15%,85%] box, so it only stops
-    // you once the content has *almost entirely* left view, not while
-    // you're dragging toward that. A bigger fraction shrinks that window
-    // (0.3 -> content must always overlap the central 40%), so you're
-    // stopped well before the view is mostly empty margin around a sliver
-    // of map in one corner.
+    // 0.3 keeps the content overlapping the central 40% so you can't pan
+    // the map almost entirely off-view.
     boundsPadding: 0.3,
     zoomDoubleClickSpeed: 1,
     smoothScroll: true,
     beforeWheel: (e) => {
-      // Allow plain wheel scroll (no modifier needed) but don't hijack the
-      // page scroll if the pointer isn't over the map.
+      // Plain wheel scroll, no modifier needed.
       e.preventDefault();
       return false;
     },
@@ -104,35 +83,21 @@ function attachPanzoom(
     const scale = instance.getTransform().scale;
     wrapEl.classList.toggle("zoomed-in", scale >= LABEL_REVEAL_ZOOM);
     const invZoom = 1 / scale;
-    // Stashed so renderMap() can re-apply the current zoom to freshly
-    // created `.node-scale` groups after a state update rebuilds them —
-    // otherwise every re-render (i.e. after every game action) would
-    // briefly reset markers to full map-zoom size until the next pan/zoom
-    // interaction happened to fire a "transform" event.
+    // Stashed so renderMap() can re-apply zoom to freshly rebuilt `.node-scale`
+    // groups (otherwise markers flash at full size after each state update).
     svgEl.dataset.invZoom = String(invZoom);
     applyNodeScale(svgEl, invZoom);
   };
   instance.on("transform", applyZoom);
-  // Apply immediately (rather than waiting for the first "transform" event)
-  // so markers/labels aren't briefly rendered at the wrong size before any
-  // zoom/pan interaction has happened.
   applyZoom();
 
   return instance;
 }
 
-// Every marker's on-map visuals (pin, station ring, label, cube badges,
-// pawns) live in a `.node-scale` group nested inside a
-// `translate(cx, cy)` — see renderMap. Counter-scaling that inner group
-// keeps the whole marker (not just its text) a constant, readable size
-// regardless of map zoom, and — because everything under it shares the
-// same local (0,0) origin the translate already placed at the city's exact
-// position — it does so without any risk of drifting off that position,
-// unlike trying to pivot a CSS `transform-origin` on each element
-// individually (which is what the previous approach did, and which broke
-// in a subtly different way for labels vs. badges vs. the marker itself).
-// This is the standard technique zoomable-map libraries (Leaflet, Mapbox,
-// etc.) use for "the pin stays pin-sized" markers.
+// Counter-scales each marker's `.node-scale` group so the whole marker stays
+// a constant, readable size at any zoom (the standard "pin stays pin-sized"
+// technique). Everything under it shares the city's local (0,0) origin, so
+// nothing drifts off-position.
 function applyNodeScale(svgEl: SVGSVGElement, invZoom: number) {
   svgEl.querySelectorAll<SVGGElement>(".node-scale").forEach((g) => {
     g.setAttribute("transform", `scale(${invZoom})`);
@@ -160,23 +125,11 @@ export function initMap(
   };
 
   function reinit() {
-    // panzoom bakes the SVG's viewBox->pixel scale into the transform once,
-    // at attach time (by reading the viewport <g>'s current CTM), then
-    // removes the viewBox and applies further pan/zoom as a `transform`
-    // attribute directly on that <g>. Re-attaching against a fresh viewBox
-    // both (a) restores the fitted, fully-zoomed-out view (used for "reset")
-    // and (b) re-fits after the container is resized (window resize, sidebar
-    // breakpoint change), where the old baked-in scale would otherwise go
-    // stale.
-    //
-    // panzoom.dispose() only removes its event listeners — it does NOT clear
-    // the `transform` attribute it already wrote onto the viewport <g>, and
-    // does not restore the SVG's viewBox either. If we re-attach without
-    // clearing that leftover transform first, the new instance's initial
-    // CTM read is the fresh viewBox scale *compounded* with the old baked-in
-    // transform, producing a wrong (sometimes wildly zoomed-in, sometimes
-    // offset) default view — this is the "scales by default" / "sometimes
-    // resets wrong" bug. Clearing it first guarantees a clean baseline.
+    // Re-attach against a fresh viewBox to restore the fitted view (reset)
+    // and re-fit after container resizes. panzoom.dispose() does NOT clear
+    // the `transform` it wrote on the viewport <g>, so clear it first —
+    // otherwise the new instance compounds the old transform and the
+    // default view comes out wrong.
     panzoom.dispose();
     viewport.removeAttribute("transform");
     svgEl.setAttribute("viewBox", `0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`);
@@ -233,15 +186,9 @@ export function renderMap(
         myLocation != null && (city.id === myLocation || conn === myLocation);
 
       if (isShuttleEdge(city.id, conn)) {
-        // A straight line between these two would cut directly across the
-        // whole map (through Asia/the Middle East/Europe) rather than
-        // across the Pacific, because this projection isn't Pacific-
-        // centered — Greenwich sits in the middle, so the Pacific is split
-        // across the map's two vertical edges. The real Pandemic board's
-        // dashed Los Angeles<->Tokyo / Los Angeles<->Sydney lines have the
-        // same problem and solve it the same way: each end just runs off
-        // its nearest edge, implying the route wraps around off-map,
-        // rather than drawing a single connecting line across the middle.
+        // A straight line would cut across the whole map (this projection
+        // isn't Pacific-centered), so each end runs off its nearest edge to
+        // imply the route wraps around off-map.
         edgesSvg.push(shuttleStub(city, b, isLegalMove));
         edgesSvg.push(shuttleStub(b, city, isLegalMove));
         continue;
@@ -266,13 +213,9 @@ export function renderMap(
     if (hasStation) classes.push("station");
     if (city.major) classes.push("major");
 
-    // Everything below is positioned relative to LOCAL (0,0) — the outer
-    // <g> translates the whole node to the city's actual map position, and
-    // the inner .node-scale <g> counter-scales it against the current zoom
-    // (see applyNodeScale). Because every part of the marker shares this
-    // same local origin, the whole thing (pin, ring, label, badges, pawns)
-    // scales and stays anchored together as one unit — nothing can drift
-    // out of alignment with anything else, at any zoom level.
+    // Positioned relative to LOCAL (0,0): the outer <g> translates to the
+    // city, the inner .node-scale <g> counter-scales against zoom (see
+    // applyNodeScale), so the whole marker stays anchored as one unit.
     const cubes = regionsWithCubes(state, city.id);
     const cubeBadges = cubes
       .map(([region, count], i) => {
@@ -322,11 +265,8 @@ export function renderMap(
   if (edgesGroup) edgesGroup.innerHTML = edgesSvg.join("");
   if (nodesGroup) {
     nodesGroup.innerHTML = nodesSvg.join("");
-    // The groups just created above start with no transform (i.e.
-    // full map-zoom scale) until the next pan/zoom "transform" event —
-    // re-apply the zoom level that was already in effect immediately so a
-    // mid-zoom state update (which happens after every game action)
-    // doesn't cause a one-frame flash of oversized markers.
+    // Re-apply the current zoom immediately so a mid-zoom state update
+    // doesn't flash oversized markers for a frame.
     const invZoom = Number(svgEl.dataset.invZoom) || 1;
     applyNodeScale(svgEl, invZoom);
   }

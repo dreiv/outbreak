@@ -29,11 +29,10 @@ const DEAL_SIZE: Record<number, number> = {
   7: 2,
 };
 
-// Server-only bookkeeping that must never be broadcast to clients (would leak
-// deck order / future draws).
+// Server-only bookkeeping — never broadcast (would leak deck order).
 export interface RoomInternal {
   playerDeck: PlayerCard[];
-  infectionDeck: string[]; // city ids, index 0 = bottom, last = top
+  infectionDeck: string[]; // index 0 = bottom, last = top
   freeMoveUsed: Set<string>; // logistics-chief per-turn tracker
 }
 
@@ -51,8 +50,7 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-// Re-read as a fresh boolean each call — avoids TS narrowing `state.phase`
-// to a literal type across recursive/mutating calls within one function body.
+// Fresh read each call — avoids TS narrowing `state.phase` across mutations.
 function isLost(state: GameState): boolean {
   return (state.phase as string) === "lost";
 }
@@ -139,7 +137,7 @@ export function startGame(room: Room): string | null {
   // Build & shuffle infection deck
   const infectionDeck = shuffle(CITIES.map((c) => c.id));
 
-  // Initial infection: 3/3/3 cities get 3/2/1 cubes
+  // Initial infection: 3 cities get 3/2/1 cubes
   const internal: RoomInternal = {
     playerDeck: [],
     infectionDeck,
@@ -156,7 +154,7 @@ export function startGame(room: Room): string | null {
     }
   }
 
-  // Build player deck: one card per city, shuffle, deal hands, then seed epidemics
+  // Player deck: one card per city, shuffled, hands dealt, epidemics seeded
   const cityCards: PlayerCard[] = shuffle(
     CITIES.map(
       (c) => ({ type: "city", city: c.id, uid: randomUUID() }) as const,
@@ -182,7 +180,7 @@ export function startGame(room: Room): string | null {
     ]);
     deckWithEpidemics.push(...withEpidemic);
   }
-  // deckWithEpidemics[0] should be drawn first -> treat end of array as "top"
+  // [0] is drawn first -> end of array is the "top"
   internal.playerDeck = deckWithEpidemics.reverse();
 
   room.internal = internal;
@@ -211,7 +209,7 @@ function addCubeToCity(
   const cur = state.cityCubes[city]?.[region] ?? 0;
 
   if (cur >= 3) {
-    if (visited.has(city)) return; // already chained through this city this event
+    if (visited.has(city)) return; // already chained through this city
     visited.add(city);
     state.outbreakCounter++;
     log(
@@ -319,7 +317,7 @@ function resolveEpidemic(room: Room) {
     }
   }
 
-  // 3. Intensify — shuffle discard pile, place on top of the draw pile
+  // 3. Intensify — shuffle discard onto the top of the draw pile
   const shuffledDiscard = shuffle(state.infectionDiscard);
   internal.infectionDeck.push(...shuffledDiscard);
   state.infectionDiscard = [];
@@ -331,7 +329,7 @@ function infectionStep(room: Room) {
   if (!internal || isLost(state)) return;
   for (let i = 0; i < state.infectionRate; i++) {
     const cityId = internal.infectionDeck.pop();
-    if (!cityId) break; // deck exhausted is not itself a loss condition here
+    if (!cityId) break; // deck exhaustion is not a loss here
     state.infectionDiscard.push(cityId);
     const region = CITY_MAP[cityId].region;
     addCubeToCity(state, cityId, region, new Set());
@@ -360,7 +358,7 @@ function endOfActions(room: Room) {
   const { state } = room;
   drawPlayerCards(room);
   if (isLost(state) || state.phase === "won") return;
-  if (state.pendingDiscard) return; // wait for discard(s) before infecting
+  if (state.pendingDiscard) return; // wait for the discard before infecting
   finishTurn(room);
 }
 
@@ -368,12 +366,9 @@ function endOfActions(room: Room) {
 // Disconnection handling
 // --------------------------------------------------------------------------
 
-// Called once a disconnected player's reconnect grace period has expired
-// (see server/src/rooms.ts + index.ts). Previously nothing ever called
-// back into game logic when that grace period ran out: the player's seat
-// stayed in state.players forever (blocking the room from being refilled
-// in the lobby) and, if it was mid-game and their turn, the game simply
-// waited on them forever since there was no auto-skip.
+// Called when a disconnected player's grace period expires (see rooms.ts).
+// Frees the seat in the lobby, or auto-discards/skips mid-game so the
+// game doesn't stall on them.
 export function forfeitPlayer(room: Room, playerId: string): void {
   const { state } = room;
   const player = state.players.find((p) => p.id === playerId);
@@ -387,8 +382,7 @@ export function forfeitPlayer(room: Room, playerId: string): void {
 
   if (state.phase !== "playing") return;
 
-  // If they were mid-discard, auto-discard down to the limit so the game
-  // isn't stuck waiting on a forced discard that can never come.
+  // Mid-discard: auto-discard down to the limit so the game isn't stuck.
   if (state.pendingDiscard && state.pendingDiscard.playerId === playerId) {
     while (player.hand.length > state.pendingDiscard.mustDiscardTo) {
       const idx = player.hand.findIndex((c) => c.type === "city");
@@ -401,7 +395,7 @@ export function forfeitPlayer(room: Room, playerId: string): void {
     return;
   }
 
-  // If it's their turn, skip it so the game doesn't stall forever.
+  // Their turn: skip it so the game doesn't stall.
   if (state.turnOrder[state.currentPlayerIndex] === playerId) {
     log(state, `${player.name} disconnected — their turn is skipped.`);
     state.actionsRemaining = 0;
@@ -527,9 +521,8 @@ export function applyAction(
       if (remaining > 0) {
         state.cityCubes[player.location]![action.region] = remaining;
       } else {
-        // Drop the entry entirely rather than leaving a stale `0` behind —
-        // cityCubes is iterated (e.g. by totalCubesOfRegion) so an empty
-        // record should mean "no entry", not "an entry worth zero".
+        // Drop the entry rather than leave a stale `0` — cityCubes is
+        // iterated, so "no entry" must mean "no cubes".
         delete state.cityCubes[player.location]![action.region];
         if (Object.keys(state.cityCubes[player.location]!).length === 0) {
           delete state.cityCubes[player.location];

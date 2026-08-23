@@ -1,7 +1,4 @@
-// ============================================================================
-// Outbreak Protocol — shared types, imported by both server and client so
-// message shapes cannot drift between them.
-// ============================================================================
+// Shared types imported by both server and client so message shapes can't drift.
 
 export type RegionId = "azure" | "crimson" | "amber" | "verdant";
 
@@ -9,22 +6,22 @@ export interface CityDef {
   id: string;
   name: string;
   region: RegionId;
-  lat: number; // degrees, -90..90
-  lon: number; // degrees, -180..180
-  x: number; // equirectangular projection of lat/lon onto a MAP_WIDTH x MAP_HEIGHT canvas (see boardData.ts)
+  lat: number;
+  lon: number;
+  x: number; // equirectangular projection of lat/lon (see boardData.ts)
   y: number;
-  major: boolean; // shown at low zoom levels; other labels reveal on zoom-in
-  connections: string[]; // city ids
+  major: boolean; // shown at low zoom; others reveal on zoom-in
+  connections: string[];
 }
 
 export type RoleId =
-  | "logistics-chief" // may drive/ferry as a free action once per turn
-  | "field-medic" // treats remove all cubes of a color, not just one
-  | "virologist" // needs only 4 cards (not 5) of a color to cure
-  | "courier" // share knowledge does not require being in the same city
-  | "liaison-officer" // may give/take any card, not just the city-match card
-  | "archivist" // hand limit is 8 instead of 7
-  | "quartermaster"; // building a research station costs no card
+  | "logistics-chief"
+  | "field-medic"
+  | "virologist"
+  | "courier"
+  | "liaison-officer"
+  | "archivist"
+  | "quartermaster";
 
 export interface RoleDef {
   id: RoleId;
@@ -34,7 +31,7 @@ export interface RoleDef {
 
 export interface PlayerCardCity {
   type: "city";
-  city: string; // city id
+  city: string;
 }
 export interface PlayerCardEpidemic {
   type: "epidemic";
@@ -47,7 +44,7 @@ export interface Player {
   id: string;
   name: string;
   role: RoleId | null;
-  location: string; // city id
+  location: string;
   hand: PlayerCard[];
   connected: boolean;
 }
@@ -58,23 +55,23 @@ export interface GameState {
   roomId: string;
   phase: "lobby" | "playing" | "won" | "lost";
   players: Player[];
-  turnOrder: string[]; // player ids
+  turnOrder: string[];
   currentPlayerIndex: number;
   actionsRemaining: number;
-  turnsPlayed: number; // count of fully-completed turns, for the end-game summary
+  turnsPlayed: number; // fully-completed turns (end-game summary)
   cityCubes: Record<string, Partial<Record<RegionId, number>>>;
   cubesRemaining: Record<RegionId, number>;
   diseaseState: Record<RegionId, DiseaseState>;
-  researchStations: string[]; // city ids, first is always the starting hub
-  infectionRate: number; // cities infected per infection step
-  infectionRateTrack: number[]; // e.g. [2,2,2,3,3,4,4]
+  researchStations: string[]; // first is the starting hub
+  infectionRate: number;
+  infectionRateTrack: number[];
   infectionRateIndex: number;
   outbreakCounter: number;
   outbreakMax: number;
   playerDeckSize: number;
   playerDiscard: PlayerCard[];
   infectionDeckSize: number;
-  infectionDiscard: string[]; // city ids
+  infectionDiscard: string[];
   log: LogEntry[];
   lossReason?: string;
   pendingDiscard?: { playerId: string; mustDiscardTo: number } | null;
@@ -85,17 +82,12 @@ export interface LogEntry {
   id: string;
   ts: number;
   text: string;
-  // Structured references a log line's text mentions, so the client doesn't
-  // have to re-derive them by parsing the human-readable text (e.g. matching
-  // a city name out of "Outbreak in <name>!" was previously done via a
-  // name->id lookup table that would silently collide if two cities ever
-  // shared a display name — this sidesteps that entirely).
+  // Structured ref so the client needn't parse log text (avoids name-collision bugs).
   cityId?: string;
 }
 
 // ---------------------------------------------------------------------------
-// Actions a player can request. Server validates & applies; never trust
-// client-side resolution beyond optimistic UI feedback.
+// Player actions. Server validates & applies; client is optimistic-only.
 // ---------------------------------------------------------------------------
 
 export type PlayerAction =
@@ -114,10 +106,6 @@ export type PlayerAction =
   | { type: "discover-cure"; region: RegionId; cardUids: string[] }
   | { type: "discard"; cardUid: string }
   | { type: "end-turn" };
-
-// ---------------------------------------------------------------------------
-// WebSocket message envelopes
-// ---------------------------------------------------------------------------
 
 export type ClientMessage =
   | { type: "join_room"; roomId: string; playerName: string; playerId?: string }

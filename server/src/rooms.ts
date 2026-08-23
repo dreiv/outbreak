@@ -1,5 +1,5 @@
-import type { WebSocket } from 'ws';
-import { Room, createRoom } from './gameState.js';
+import type { WebSocket } from "ws";
+import { Room, createRoom } from "./gameState.js";
 
 interface Sockets {
   [playerId: string]: WebSocket;
@@ -8,15 +8,8 @@ interface Sockets {
 const rooms = new Map<string, Room>();
 const sockets = new Map<string, Sockets>(); // roomId -> playerId -> ws
 
-// Single source of truth for "player has been disconnected too long" grace
-// timers, keyed by `${roomId}:${playerId}`. Previously this logic was
-// duplicated: one timer lived here and did nothing but clear itself, and a
-// second (functionally identical) timer lived in index.ts and only ever
-// checked whether the *room* was empty — neither one ever acted on an
-// individual disconnected seat, so a player who dropped mid-game held their
-// seat (and could block the turn order) forever. Now there's one timer,
-// and its callback (registered by index.ts via scheduleGraceExpiry) is what
-// actually frees the seat / unsticks the game.
+// Reconnect grace timers, keyed by `${roomId}:${playerId}`. The expiry
+// callback (set via scheduleGraceExpiry) frees the seat / unsticks the game.
 const graceTimers = new Map<string, NodeJS.Timeout>();
 
 export function getOrCreateRoom(roomId: string): Room {
@@ -33,7 +26,11 @@ export function getRoom(roomId: string): Room | undefined {
   return rooms.get(roomId);
 }
 
-export function registerSocket(roomId: string, playerId: string, ws: WebSocket) {
+export function registerSocket(
+  roomId: string,
+  playerId: string,
+  ws: WebSocket,
+) {
   const bucket = sockets.get(roomId) ?? {};
   bucket[playerId] = ws;
   sockets.set(roomId, bucket);
@@ -42,7 +39,7 @@ export function registerSocket(roomId: string, playerId: string, ws: WebSocket) 
   const player = room?.state.players.find((p) => p.id === playerId);
   if (player) player.connected = true;
 
-  // A reconnect within the grace period cancels any pending forfeiture.
+  // Reconnect within the grace period cancels the pending forfeiture.
   cancelGraceExpiry(roomId, playerId);
 }
 
