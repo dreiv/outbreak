@@ -6,6 +6,7 @@ import type {
   RegionId,
 } from "../../shared/src/types";
 import { REGION_META, ROLES } from "../../shared/src/types";
+import { escapeHtml } from "./escape";
 
 export type Dispatch = (action: PlayerAction) => void;
 
@@ -66,7 +67,7 @@ export function renderSidebar(
       const isTurn = p.id === currentId;
       return `
       <div class="player-chip ${isTurn ? "active" : ""}">
-        <span>${p.name}${p.id === myId ? " (you)" : ""} — ${CITY_MAP[p.location].name}</span>
+        <span>${escapeHtml(p.name)}${p.id === myId ? " (you)" : ""} — ${CITY_MAP[p.location].name}</span>
         ${p.connected ? "" : '<span class="offline-tag">offline</span>'}
       </div>`;
     })
@@ -74,14 +75,14 @@ export function renderSidebar(
 
   const logHtml = state.log
     .slice(-40)
-    .map((l) => `<div>${l.text}</div>`)
+    .map((l) => `<div>${escapeHtml(l.text)}</div>`)
     .join("");
 
   el.innerHTML = `
     <div>
       <h2>Status</h2>
       <div class="turn-banner">
-        <div class="who">${current ? current.name : "—"}${isMyTurn ? " (your turn)" : ""}</div>
+        <div class="who">${current ? escapeHtml(current.name) : "—"}${isMyTurn ? " (your turn)" : ""}</div>
         <div class="role">${current ? roleLabel(current.role) : ""}</div>
         <div class="actions-left">${pips}</div>
         <button class="end-turn-btn" id="end-turn-btn" ${isMyTurn && state.phase === "playing" ? "" : "disabled"}>End Turn</button>
@@ -194,22 +195,58 @@ export function renderCityPopup(
           }
         }
       }
-      const othersHere = state.players.filter(
-        (p) => p.id !== myId && p.location === cityId,
-      );
-      for (const other of othersHere) {
+      const shareTargets = state.players.filter((p) => p.id !== myId);
+      for (const other of shareTargets) {
+        const colocated = other.location === cityId;
+        const courierInvolved = me.role === "courier" || other.role === "courier";
+        // Normal rule: sharing requires being in the same city. Courier's
+        // whole ability is relaxing that — previously the popup only ever
+        // looked at players physically standing in this city, so a Courier
+        // sharing with someone elsewhere could never see a button at all.
+        if (!colocated && !courierInvolved) continue;
+        const remoteTag = colocated ? "" : " (remote)";
         const flexible =
           me.role === "liaison-officer" || other.role === "liaison-officer";
-        const cardHereMine = me.hand.find(
-          (c) => c.type === "city" && c.city === cityId,
-        );
-        const cardHereTheirs = other.hand.find(
-          (c) => c.type === "city" && c.city === cityId,
-        );
-        if (cardHereMine || flexible)
-          addBtn(`Give card to ${other.name}`, `share-give:${other.id}`);
-        if (cardHereTheirs || flexible)
-          addBtn(`Take card from ${other.name}`, `share-take:${other.id}`);
+
+        if (flexible) {
+          // Liaison Officer relaxes *which* card can be shared — any card,
+          // not just the one matching the current city. Previously the
+          // button appeared but always sent `cityCard: cityId` regardless,
+          // so unless that exact card happened to be in the giver's hand
+          // the share silently failed — the flexibility was never actually
+          // usable. Offer one button per card actually in the giver's hand.
+          for (const card of me.hand) {
+            if (card.type !== "city") continue;
+            addBtn(
+              `Give ${CITY_MAP[card.city].name} card to ${escapeHtml(other.name)}${remoteTag}`,
+              `share-give:${other.id}:${card.city}`,
+            );
+          }
+          for (const card of other.hand) {
+            if (card.type !== "city") continue;
+            addBtn(
+              `Take ${CITY_MAP[card.city].name} card from ${escapeHtml(other.name)}${remoteTag}`,
+              `share-take:${other.id}:${card.city}`,
+            );
+          }
+        } else {
+          const cardHereMine = me.hand.find(
+            (c) => c.type === "city" && c.city === cityId,
+          );
+          const cardHereTheirs = other.hand.find(
+            (c) => c.type === "city" && c.city === cityId,
+          );
+          if (cardHereMine)
+            addBtn(
+              `Give card to ${escapeHtml(other.name)}${remoteTag}`,
+              `share-give:${other.id}:${cityId}`,
+            );
+          if (cardHereTheirs)
+            addBtn(
+              `Take card from ${escapeHtml(other.name)}${remoteTag}`,
+              `share-take:${other.id}:${cityId}`,
+            );
+        }
       }
     } else {
       if (CITY_MAP[me.location].connections.includes(cityId)) {
@@ -260,17 +297,19 @@ export function renderCityPopup(
         onNeedCureCards(act.split(":")[1] as RegionId);
         return;
       } else if (act.startsWith("share-give:")) {
+        const [, otherId, cardCity] = act.split(":");
         dispatch({
           type: "share-knowledge",
-          withPlayerId: act.split(":")[1],
-          cityCard: cityId,
+          withPlayerId: otherId,
+          cityCard: cardCity,
           direction: "give",
         });
       } else if (act.startsWith("share-take:")) {
+        const [, otherId, cardCity] = act.split(":");
         dispatch({
           type: "share-knowledge",
-          withPlayerId: act.split(":")[1],
-          cityCard: cityId,
+          withPlayerId: otherId,
+          cityCard: cardCity,
           direction: "take",
         });
       }

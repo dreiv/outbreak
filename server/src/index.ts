@@ -1,13 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
-import type { ClientMessage, ServerMessage } from '../../shared/src/types';
-import { addPlayer, applyAction, startGame } from './gameState';
+import type { ClientMessage, ServerMessage } from '../../shared/src/types.js';
+import { addPlayer, applyAction, startGame, forfeitPlayer } from './gameState.js';
 import {
   getOrCreateRoom, getRoom, registerSocket, unregisterSocket, broadcast, destroyRoomIfEmpty,
-} from './rooms';
+  scheduleGraceExpiry,
+} from './rooms.js';
 
 const PORT = Number(process.env.PORT) || 8787;
-const wss = new WebSocketServer({ port: PORT });
+const GRACE_PERIOD_MS = 2 * 60 * 1000; // time to reconnect before a seat is forfeited
+const MAX_MESSAGE_BYTES = 32 * 1024; // generous for this protocol's largest payload (full state); guards against a malicious/broken client flooding the process
+const wss = new WebSocketServer({ port: PORT, maxPayload: MAX_MESSAGE_BYTES });
 
 interface ConnMeta {
   roomId: string | null;
@@ -91,12 +94,21 @@ wss.on('connection', (ws: WebSocket) => {
 
   ws.on('close', () => {
     if (meta.roomId && meta.playerId) {
-      unregisterSocket(meta.roomId, meta.playerId);
-      broadcastState(meta.roomId);
-      // Give reconnects a grace period before considering the room for cleanup.
-      setTimeout(() => {
-        if (meta.roomId) destroyRoomIfEmpty(meta.roomId);
-      }, 2 * 60 * 1000 + 1000);
+      const { roomId, playerId } = meta;
+      unregisterSocket(roomId, playerId);
+      broadcastState(roomId);
+      // Give reconnects a grace period before forfeiting the seat (freeing it
+      // in the lobby, or auto-skipping their turn mid-game) and considering
+      // the room for cleanup. registerSocket() cancels this if they
+      // reconnect in time.
+      scheduleGraceExpiry(roomId, playerId, GRACE_PERIOD_MS, () => {
+        const room = getRoom(roomId);
+        if (room) {
+          forfeitPlayer(room, playerId);
+          broadcastState(roomId);
+        }
+        destroyRoomIfEmpty(roomId);
+      });
     }
   });
 });

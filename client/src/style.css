@@ -135,6 +135,39 @@ button {
   margin-bottom: 12px;
 }
 
+.game-error-toast {
+  position: absolute;
+  top: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #3a1420;
+  border: 1px solid #5c1f2c;
+  color: #ffb4bf;
+  padding: 8px 10px 8px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  max-width: min(480px, calc(100vw - 32px));
+}
+
+.game-error-toast button {
+  background: transparent;
+  border: none;
+  color: #ffb4bf;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 2px 4px;
+  opacity: 0.8;
+}
+.game-error-toast button:hover {
+  opacity: 1;
+}
+
 .lobby-players {
   margin: 18px 0;
   display: flex;
@@ -166,11 +199,17 @@ button {
 /* ---------- Game shell ---------- */
 
 .game-shell {
+  position: relative; /* anchors .game-error-toast */
   flex: 1;
   display: grid;
   grid-template-columns: 1fr 340px;
   grid-template-rows: auto 1fr;
   height: 100vh;
+  /* Grid items default to min-height:auto, so without this the sidebar's
+     own content (below) can force this row taller than the viewport,
+     which overflows onto the page and scrolls the topbar out of view
+     instead of scrolling inside the sidebar. */
+  min-height: 0;
 }
 
 .topbar {
@@ -250,6 +289,7 @@ button {
 .map-wrap {
   position: relative;
   overflow: hidden;
+  min-height: 0; /* see .game-shell comment — same grid-row-overflow fix */
   background: radial-gradient(ellipse at center, #0e1830 0%, #070d18 100%);
   touch-action: none; /* let panzoom fully own touch gestures (pinch/drag) */
 }
@@ -560,6 +600,9 @@ button {
   background: var(--panel);
   border-left: 1px solid var(--border);
   overflow-y: auto;
+  min-height: 0; /* let the grid row's 1fr size win so this scrolls
+                    internally instead of growing the page (and pushing
+                    the topbar off-screen) to fit the log/hand content */
   padding: 14px;
   display: flex;
   flex-direction: column;

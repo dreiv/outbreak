@@ -1,9 +1,23 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "outDir": "dist",
+    /* `include` spans both server/src and ../shared/src, so their common
+       source root is the repo root — without an explicit rootDir, tsc can't
+       infer one and the build fails outright ("common source directory...
+       rootDir must be explicitly set"). Emitted output mirrors this: this
+       file's dist/server/src/index.js, shared/src/*.ts -> dist/shared/src/.
+       (See package.json's "start" script, which points at the resulting
+       path.) module/moduleResolution are NodeNext rather than
+       ESNext/Bundler so the emitted JS keeps working relative-import
+       extensions (see the .js-suffixed imports in src/*.ts and
+       shared/src/*.ts) — Bundler-style resolution happily compiles
+       extensionless imports, but plain `node` refuses to resolve them at
+       runtime, so a build made that way would fail immediately on `npm
+       start` even though `tsc` itself reported success. */
+    "rootDir": "..",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,

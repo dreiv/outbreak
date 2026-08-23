@@ -85,6 +85,12 @@ export interface LogEntry {
   id: string;
   ts: number;
   text: string;
+  // Structured references a log line's text mentions, so the client doesn't
+  // have to re-derive them by parsing the human-readable text (e.g. matching
+  // a city name out of "Outbreak in <name>!" was previously done via a
+  // name->id lookup table that would silently collide if two cities ever
+  // shared a display name — this sidesteps that entirely).
+  cityId?: string;
 }
 
 // ---------------------------------------------------------------------------

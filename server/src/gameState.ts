@@ -4,7 +4,7 @@ import {
   CITY_MAP,
   STARTING_CITY,
   isConnected,
-} from "../../shared/src/boardData";
+} from "../../shared/src/boardData.js";
 import {
   GameState,
   Player,
@@ -14,7 +14,7 @@ import {
   RoleId,
   ROLES,
   HAND_LIMIT,
-} from "../../shared/src/types";
+} from "../../shared/src/types.js";
 
 const REGIONS: RegionId[] = ["azure", "crimson", "amber", "verdant"];
 const EPIDEMIC_COUNT = 5;
@@ -57,8 +57,8 @@ function isLost(state: GameState): boolean {
   return (state.phase as string) === "lost";
 }
 
-function log(state: GameState, text: string) {
-  state.log.push({ id: randomUUID(), ts: Date.now(), text });
+function log(state: GameState, text: string, extra?: { cityId?: string }) {
+  state.log.push({ id: randomUUID(), ts: Date.now(), text, ...extra });
   if (state.log.length > 200) state.log.shift();
 }
 
@@ -217,6 +217,7 @@ function addCubeToCity(
     log(
       state,
       `Outbreak in ${CITY_MAP[city].name}! (${state.outbreakCounter}/${state.outbreakMax})`,
+      { cityId: city },
     );
     if (state.outbreakCounter >= state.outbreakMax) {
       state.phase = "lost";
@@ -364,6 +365,51 @@ function endOfActions(room: Room) {
 }
 
 // --------------------------------------------------------------------------
+// Disconnection handling
+// --------------------------------------------------------------------------
+
+// Called once a disconnected player's reconnect grace period has expired
+// (see server/src/rooms.ts + index.ts). Previously nothing ever called
+// back into game logic when that grace period ran out: the player's seat
+// stayed in state.players forever (blocking the room from being refilled
+// in the lobby) and, if it was mid-game and their turn, the game simply
+// waited on them forever since there was no auto-skip.
+export function forfeitPlayer(room: Room, playerId: string): void {
+  const { state } = room;
+  const player = state.players.find((p) => p.id === playerId);
+  if (!player) return;
+
+  if (state.phase === "lobby") {
+    state.players = state.players.filter((p) => p.id !== playerId);
+    log(state, `${player.name} left the room.`);
+    return;
+  }
+
+  if (state.phase !== "playing") return;
+
+  // If they were mid-discard, auto-discard down to the limit so the game
+  // isn't stuck waiting on a forced discard that can never come.
+  if (state.pendingDiscard && state.pendingDiscard.playerId === playerId) {
+    while (player.hand.length > state.pendingDiscard.mustDiscardTo) {
+      const idx = player.hand.findIndex((c) => c.type === "city");
+      const [card] = player.hand.splice(idx === -1 ? 0 : idx, 1);
+      if (card.type === "city") state.playerDiscard.push(card);
+    }
+    log(state, `${player.name} disconnected — their hand was auto-discarded.`);
+    state.pendingDiscard = null;
+    finishTurn(room);
+    return;
+  }
+
+  // If it's their turn, skip it so the game doesn't stall forever.
+  if (state.turnOrder[state.currentPlayerIndex] === playerId) {
+    log(state, `${player.name} disconnected — their turn is skipped.`);
+    state.actionsRemaining = 0;
+    endOfActions(room);
+  }
+}
+
+// --------------------------------------------------------------------------
 // Action application
 // --------------------------------------------------------------------------
 
@@ -477,7 +523,18 @@ export function applyAction(
         player.role === "field-medic" ||
         state.diseaseState[action.region] === "cured";
       const removed = removeAll ? cur : 1;
-      state.cityCubes[player.location]![action.region] = cur - removed;
+      const remaining = cur - removed;
+      if (remaining > 0) {
+        state.cityCubes[player.location]![action.region] = remaining;
+      } else {
+        // Drop the entry entirely rather than leaving a stale `0` behind —
+        // cityCubes is iterated (e.g. by totalCubesOfRegion) so an empty
+        // record should mean "no entry", not "an entry worth zero".
+        delete state.cityCubes[player.location]![action.region];
+        if (Object.keys(state.cityCubes[player.location]!).length === 0) {
+          delete state.cityCubes[player.location];
+        }
+      }
       state.cubesRemaining[action.region] += removed;
       if (
         state.diseaseState[action.region] === "cured" &&
@@ -569,7 +626,6 @@ export function applyAction(
       }
       player.hand = player.hand.filter((c) => !action.cardUids.includes(c.uid));
       state.playerDiscard.push(...cards);
-      state.diseaseState[action.region] = "active";
       if (totalCubesOfRegion(state, action.region) === 0) {
         state.diseaseState[action.region] = "eradicated";
       } else {

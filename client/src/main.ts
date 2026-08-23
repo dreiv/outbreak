@@ -16,6 +16,7 @@ import {
 } from "./ui";
 import { runEffects } from "./effects";
 import { sound, unlockAudio, isMuted, toggleMuted } from "./sound";
+import { escapeHtml } from "./escape";
 
 const app = document.getElementById("app")!;
 
@@ -25,6 +26,7 @@ let myPlayerId: string | null = localStorage.getItem("op_player_id");
 let roomId: string | null = localStorage.getItem("op_room_id");
 let playerName: string = localStorage.getItem("op_player_name") || "";
 let errorMsg: string | null = null;
+let errorToastTimer: number | undefined;
 let selectedCity: string | null = null;
 let connStatus: "connecting" | "open" | "closed" = "connecting";
 
@@ -51,28 +53,28 @@ function renderLobbyScreen() {
       <div class="lobby-card">
         <h1>🧬 Outbreak Protocol</h1>
         <p class="tagline">Cooperative global outbreak response — 2 to 4 players.</p>
-        ${errorMsg ? `<div class="error-banner">${errorMsg}</div>` : ""}
+        ${errorMsg ? `<div class="error-banner">${escapeHtml(errorMsg)}</div>` : ""}
         ${
           !inLobbyRoom
             ? `
           <div class="field">
             <label>Your name</label>
-            <input id="name-input" type="text" value="${playerName}" placeholder="Agent Smith" maxlength="24" />
+            <input id="name-input" type="text" value="${escapeHtml(playerName)}" placeholder="Agent Smith" maxlength="24" />
           </div>
           <div class="field">
             <label>Room code</label>
-            <input id="room-input" type="text" value="${roomId ?? ""}" placeholder="e.g. bravo-19" maxlength="24" />
+            <input id="room-input" type="text" value="${escapeHtml(roomId ?? "")}" placeholder="e.g. bravo-19" maxlength="24" />
           </div>
           <button class="btn-primary" id="join-btn">Join / Create Room</button>
         `
             : `
-          <p style="color:var(--text-dim); font-size:13px;">Room: <b style="color:var(--text)">${gameState!.roomId}</b> — share this code with your team.</p>
+          <p style="color:var(--text-dim); font-size:13px;">Room: <b style="color:var(--text)">${escapeHtml(gameState!.roomId)}</b> — share this code with your team.</p>
           <div class="lobby-players">
             ${gameState!.players
               .map(
                 (p) => `
               <div class="lobby-player-row ${p.connected ? "" : "offline"}">
-                <span><span class="dot"></span>${p.name}${p.id === myPlayerId ? " (you)" : ""}</span>
+                <span><span class="dot"></span>${escapeHtml(p.name)}${p.id === myPlayerId ? " (you)" : ""}</span>
                 <span style="color:var(--text-dim); font-size:11px;">${p.connected ? "connected" : "offline"}</span>
               </div>`,
               )
@@ -135,6 +137,7 @@ function buildGameShellOnce() {
         </span>
         <span class="conn-status"><span class="conn-dot" id="conn-dot"></span><span id="conn-text">connected</span></span>
       </div>
+      <div class="game-error-toast" id="game-error-toast" style="display:none;"></div>
       <div class="map-wrap" id="map-wrap">
         <svg id="board-svg"></svg>
         <div class="city-popup" id="city-popup" style="display:none;"></div>
@@ -288,6 +291,25 @@ function renderGameScreen() {
           ? "reconnecting…"
           : "disconnected";
   }
+
+  // In-game errors (a rejected action — race condition, invalid move,
+  // out-of-turn — from the server's `error` message) previously only ever
+  // rendered on the lobby screen, so a rejected action mid-game gave zero
+  // feedback. Surface it as a dismissible toast here too.
+  const toast = document.getElementById("game-error-toast");
+  if (toast) {
+    if (errorMsg) {
+      toast.style.display = "flex";
+      toast.innerHTML = `<span>${escapeHtml(errorMsg)}</span><button id="error-toast-close" aria-label="Dismiss">✕</button>`;
+      document.getElementById("error-toast-close")?.addEventListener("click", () => {
+        errorMsg = null;
+        renderGameScreen();
+      });
+    } else {
+      toast.style.display = "none";
+      toast.innerHTML = "";
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -329,6 +351,11 @@ socket.onMessage((msg) => {
     didStateUpdate = true;
   } else if (msg.type === "error") {
     errorMsg = msg.message;
+    window.clearTimeout(errorToastTimer);
+    errorToastTimer = window.setTimeout(() => {
+      errorMsg = null;
+      render();
+    }, 6000);
   }
 
   render();

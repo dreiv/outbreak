@@ -95,12 +95,24 @@ export function initMap(
 
   function reinit() {
     // panzoom bakes the SVG's viewBox->pixel scale into the transform once,
-    // at attach time, then removes the viewBox. Re-attaching against a fresh
-    // viewBox both (a) restores the fitted, fully-zoomed-out view (used for
-    // "reset") and (b) re-fits after the container is resized (window
-    // resize, sidebar breakpoint change), where the old baked-in scale would
-    // otherwise go stale.
+    // at attach time (by reading the viewport <g>'s current CTM), then
+    // removes the viewBox and applies further pan/zoom as a `transform`
+    // attribute directly on that <g>. Re-attaching against a fresh viewBox
+    // both (a) restores the fitted, fully-zoomed-out view (used for "reset")
+    // and (b) re-fits after the container is resized (window resize, sidebar
+    // breakpoint change), where the old baked-in scale would otherwise go
+    // stale.
+    //
+    // panzoom.dispose() only removes its event listeners — it does NOT clear
+    // the `transform` attribute it already wrote onto the viewport <g>, and
+    // does not restore the SVG's viewBox either. If we re-attach without
+    // clearing that leftover transform first, the new instance's initial
+    // CTM read is the fresh viewBox scale *compounded* with the old baked-in
+    // transform, producing a wrong (sometimes wildly zoomed-in, sometimes
+    // offset) default view — this is the "scales by default" / "sometimes
+    // resets wrong" bug. Clearing it first guarantees a clean baseline.
     panzoom.dispose();
+    viewport.removeAttribute("transform");
     svgEl.setAttribute("viewBox", `0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`);
     panzoom = attachPanzoom(svgEl, viewport, wrapEl);
     wrapEl.classList.remove("zoomed-in");

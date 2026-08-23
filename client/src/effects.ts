@@ -3,9 +3,6 @@ import type { CityDef, GameState, RegionId } from "../../shared/src/types";
 import { REGION_META } from "../../shared/src/types";
 import { sound } from "./sound";
 
-const NAME_TO_ID = new Map<string, string>(
-  Object.values(CITY_MAP).map((c) => [c.name, c.id]),
-);
 const REGION_IDS = new Set<string>(Object.keys(REGION_META));
 
 const NS = "http://www.w3.org/2000/svg";
@@ -117,11 +114,12 @@ export function runEffects(
   let lastCureRegion: RegionId | null = null;
 
   for (const entry of newEntries) {
-    const outbreakMatch = entry.text.match(/^Outbreak in (.+)! \(/);
-    if (outbreakMatch) {
+    if (/^Outbreak in .+! \(/.test(entry.text)) {
       sawOutbreak = true;
-      const cityId = NAME_TO_ID.get(outbreakMatch[1]);
-      const city = cityId ? CITY_MAP[cityId] : undefined;
+      // Prefer the structured cityId the server now attaches to this log
+      // line over parsing it back out of the display name (which could
+      // silently collide if two cities ever shared a name).
+      const city = entry.cityId ? CITY_MAP[entry.cityId] : undefined;
       if (city) {
         spawnPulse(fx, city, "outbreak");
         lastOutbreakCity = city;

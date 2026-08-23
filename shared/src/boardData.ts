@@ -1,4 +1,4 @@
-import type { CityDef, RegionId } from './types';
+import type { CityDef, RegionId } from './types.js';
 
 interface RawCity {
   id: string;

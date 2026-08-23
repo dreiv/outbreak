@@ -1,7 +1,5 @@
 import type { WebSocket } from 'ws';
-import { Room, createRoom } from './gameState';
-
-const GRACE_PERIOD_MS = 2 * 60 * 1000; // 2 minutes to reconnect before seat is freed
+import { Room, createRoom } from './gameState.js';
 
 interface Sockets {
   [playerId: string]: WebSocket;
@@ -9,7 +7,17 @@ interface Sockets {
 
 const rooms = new Map<string, Room>();
 const sockets = new Map<string, Sockets>(); // roomId -> playerId -> ws
-const disconnectTimers = new Map<string, NodeJS.Timeout>(); // `${roomId}:${playerId}`
+
+// Single source of truth for "player has been disconnected too long" grace
+// timers, keyed by `${roomId}:${playerId}`. Previously this logic was
+// duplicated: one timer lived here and did nothing but clear itself, and a
+// second (functionally identical) timer lived in index.ts and only ever
+// checked whether the *room* was empty — neither one ever acted on an
+// individual disconnected seat, so a player who dropped mid-game held their
+// seat (and could block the turn order) forever. Now there's one timer,
+// and its callback (registered by index.ts via scheduleGraceExpiry) is what
+// actually frees the seat / unsticks the game.
+const graceTimers = new Map<string, NodeJS.Timeout>();
 
 export function getOrCreateRoom(roomId: string): Room {
   let room = rooms.get(roomId);
@@ -30,15 +38,12 @@ export function registerSocket(roomId: string, playerId: string, ws: WebSocket) 
   bucket[playerId] = ws;
   sockets.set(roomId, bucket);
 
-  const timerKey = `${roomId}:${playerId}`;
-  const timer = disconnectTimers.get(timerKey);
-  if (timer) {
-    clearTimeout(timer);
-    disconnectTimers.delete(timerKey);
-  }
   const room = rooms.get(roomId);
   const player = room?.state.players.find((p) => p.id === playerId);
   if (player) player.connected = true;
+
+  // A reconnect within the grace period cancels any pending forfeiture.
+  cancelGraceExpiry(roomId, playerId);
 }
 
 export function unregisterSocket(roomId: string, playerId: string) {
@@ -48,14 +53,30 @@ export function unregisterSocket(roomId: string, playerId: string) {
   const room = rooms.get(roomId);
   const player = room?.state.players.find((p) => p.id === playerId);
   if (player) player.connected = false;
+}
 
-  const timerKey = `${roomId}:${playerId}`;
+export function scheduleGraceExpiry(
+  roomId: string,
+  playerId: string,
+  graceMs: number,
+  onExpire: () => void,
+) {
+  const key = `${roomId}:${playerId}`;
+  cancelGraceExpiry(roomId, playerId);
   const timer = setTimeout(() => {
-    // Grace period expired — seat stays reserved in state.players so the
-    // room's history is intact, but we stop waiting on this connection.
-    disconnectTimers.delete(timerKey);
-  }, GRACE_PERIOD_MS);
-  disconnectTimers.set(timerKey, timer);
+    graceTimers.delete(key);
+    onExpire();
+  }, graceMs);
+  graceTimers.set(key, timer);
+}
+
+export function cancelGraceExpiry(roomId: string, playerId: string) {
+  const key = `${roomId}:${playerId}`;
+  const timer = graceTimers.get(key);
+  if (timer) {
+    clearTimeout(timer);
+    graceTimers.delete(key);
+  }
 }
 
 export function broadcast(roomId: string, payload: unknown) {
