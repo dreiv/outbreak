@@ -1,14 +1,19 @@
-import { CITY_MAP } from "../../shared/src/boardData";
+import { CITY_MAP, CITIES } from "../../shared/src/boardData";
 import type {
   GameState,
   PlayerAction,
   PlayerCard,
   RegionId,
+  EventId,
 } from "../../shared/src/types";
-import { REGION_META, ROLES } from "../../shared/src/types";
+import { REGION_META, ROLES, EVENTS } from "../../shared/src/types";
 import { escapeHtml } from "./escape";
 
 export type Dispatch = (action: PlayerAction) => void;
+
+function eventName(id: EventId): string {
+  return EVENTS.find((e) => e.id === id)?.name ?? id;
+}
 
 function roleLabel(roleId: string | null): string {
   return ROLES.find((r) => r.id === roleId)?.name ?? "Unassigned";
@@ -26,6 +31,7 @@ export function renderSidebar(
   state: GameState,
   myId: string,
   dispatch: Dispatch,
+  onPlayEvent: (cardUid: string, event: EventId) => void,
 ) {
   const me = state.players.find((p) => p.id === myId);
   const currentId = state.turnOrder[state.currentPlayerIndex];
@@ -57,6 +63,9 @@ export function renderSidebar(
       .map((c) => {
         if (c.type === "epidemic") {
           return `<div class="hand-card epidemic"><span>⚠️ Epidemic</span></div>`;
+        }
+        if (c.type === "event") {
+          return `<div class="hand-card event"><span>🃏 ${escapeHtml(eventName(c.event))}</span><button class="play-event-btn" data-uid="${c.uid}" data-event="${c.event}">Play</button></div>`;
         }
         return `<div class="hand-card"><span>${CITY_MAP[c.city].name}</span></div>`;
       })
@@ -109,7 +118,8 @@ export function renderSidebar(
       <div class="stat-row"><span>Research stations</span><b>${state.researchStations.length}</b></div>
       <div class="stat-row"><span>Player deck</span><b>${state.playerDeckSize} left</b></div>
       <div class="stat-row"><span>Infection deck</span><b>${state.infectionDeckSize} left</b></div>
-      <div class="stat-row"><span>Epidemics resolved</span><b>${state.epidemicsResolved}</b></div>
+      <div class="stat-row"><span>Epidemics resolved</span><b>${state.epidemicsResolved} / ${state.epidemicCount}</b></div>
+      ${state.oneQuietNightActive ? `<div class="stat-row"><span>🌙 One Quiet Night armed</span><b>next infection skipped</b></div>` : ""}
     </div>
 
     <div>
@@ -131,6 +141,11 @@ export function renderSidebar(
   el.querySelector("#end-turn-btn")?.addEventListener("click", () =>
     dispatch({ type: "end-turn" }),
   );
+  el.querySelectorAll<HTMLButtonElement>(".play-event-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      onPlayEvent(btn.dataset.uid!, btn.dataset.event as EventId);
+    });
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -365,6 +380,170 @@ export function renderCureModal(
 }
 
 // ---------------------------------------------------------------------------
+// Event card modal — collects parameters, then dispatches the play action
+// ---------------------------------------------------------------------------
+
+export function renderEventModal(
+  el: HTMLElement,
+  state: GameState,
+  myId: string,
+  cardUid: string,
+  event: EventId,
+  dispatch: Dispatch,
+  onClose: () => void,
+) {
+  const me = state.players.find((p) => p.id === myId);
+  if (!me) {
+    el.style.display = "none";
+    el.innerHTML = "";
+    return;
+  }
+  const cityOptions = CITIES.map(
+    (c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`,
+  ).join("");
+
+  let body = "";
+  if (event === "government-grant") {
+    body = `
+      <p style="color:var(--text-dim); font-size:13px;">Build a research station in any city — no card needed.</p>
+      <select id="ev-city">${cityOptions}</select>
+      <button class="btn-primary" id="ev-confirm">Build Station</button>`;
+  } else if (event === "airlift") {
+    const playerOptions = state.players
+      .map(
+        (p) =>
+          `<option value="${p.id}">${escapeHtml(p.name)}${p.id === myId ? " (you)" : ""}</option>`,
+      )
+      .join("");
+    body = `
+      <p style="color:var(--text-dim); font-size:13px;">Move any player to any city.</p>
+      <select id="ev-player">${playerOptions}</select>
+      <select id="ev-city">${cityOptions}</select>
+      <button class="btn-primary" id="ev-confirm">Airlift</button>`;
+  } else if (event === "resilient-population") {
+    const seen = new Set<string>();
+    const discardOptions = state.infectionDiscard
+      .filter((c) => (seen.has(c) ? false : (seen.add(c), true)))
+      .map((c) => `<option value="${c}">${escapeHtml(CITY_MAP[c].name)}</option>`)
+      .join("");
+    body = state.infectionDiscard.length
+      ? `
+      <p style="color:var(--text-dim); font-size:13px;">Remove one card from the infection discard pile — permanently, out of the game.</p>
+      <select id="ev-city">${discardOptions}</select>
+      <button class="btn-primary" id="ev-confirm">Remove</button>`
+      : `<p style="color:var(--text-dim); font-size:13px;">The infection discard pile is empty — nothing to remove yet.</p>
+         <button id="ev-cancel-only">Close</button>`;
+  } else if (event === "one-quiet-night") {
+    body = `
+      <p style="color:var(--text-dim); font-size:13px;">Skip the next infection step entirely.</p>
+      <button class="btn-primary" id="ev-confirm">Play One Quiet Night</button>`;
+  } else if (event === "forecast") {
+    body = `
+      <p style="color:var(--text-dim); font-size:13px;">Peek at the top of the Infection Deck and rearrange it.</p>
+      <button class="btn-primary" id="ev-confirm">Peek</button>`;
+  }
+
+  el.style.display = "flex";
+  el.innerHTML = `
+    <div class="discard-modal">
+      <h3>🃏 ${escapeHtml(eventName(event))}</h3>
+      ${body}
+      <button id="ev-cancel" style="margin-top:8px;">Cancel</button>
+    </div>
+  `;
+
+  el.querySelector("#ev-cancel")?.addEventListener("click", onClose);
+  el.querySelector("#ev-cancel-only")?.addEventListener("click", onClose);
+  el.querySelector("#ev-confirm")?.addEventListener("click", () => {
+    const cityEl = el.querySelector("#ev-city") as HTMLSelectElement | null;
+    const playerEl = el.querySelector(
+      "#ev-player",
+    ) as HTMLSelectElement | null;
+    if (event === "government-grant") {
+      dispatch({
+        type: "play-government-grant",
+        cardUid,
+        city: cityEl!.value,
+      });
+    } else if (event === "airlift") {
+      dispatch({
+        type: "play-airlift",
+        cardUid,
+        playerId: playerEl!.value,
+        to: cityEl!.value,
+      });
+    } else if (event === "resilient-population") {
+      dispatch({
+        type: "play-resilient-population",
+        cardUid,
+        cityId: cityEl!.value,
+      });
+    } else if (event === "one-quiet-night") {
+      dispatch({ type: "play-one-quiet-night", cardUid });
+    } else if (event === "forecast") {
+      dispatch({ type: "play-forecast", cardUid });
+    }
+    onClose();
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Forecast reorder overlay — shown once the server reveals the top cards
+// ---------------------------------------------------------------------------
+
+export function renderForecastOverlay(
+  el: HTMLElement,
+  state: GameState,
+  myId: string,
+  order: string[],
+  setOrder: (next: string[]) => void,
+  dispatch: Dispatch,
+) {
+  if (!state.pendingForecast || state.pendingForecast.playerId !== myId) {
+    el.style.display = "none";
+    el.innerHTML = "";
+    return;
+  }
+  const rows = order
+    .map(
+      (cityId, i) => `
+      <div class="hand-card">
+        <span>${i + 1}. ${escapeHtml(CITY_MAP[cityId].name)}</span>
+        <span>
+          <button data-dir="up" data-idx="${i}" ${i === 0 ? "disabled" : ""}>↑</button>
+          <button data-dir="down" data-idx="${i}" ${i === order.length - 1 ? "disabled" : ""}>↓</button>
+        </span>
+      </div>`,
+    )
+    .join("");
+
+  el.style.display = "flex";
+  el.innerHTML = `
+    <div class="discard-modal">
+      <h3>🔮 Forecast</h3>
+      <p style="color:var(--text-dim); font-size:13px;">Top of the Infection Deck, in draw order (1 = drawn next). Reorder as you like, then confirm.</p>
+      <div class="hand-list">${rows}</div>
+      <button class="btn-primary" id="forecast-confirm" style="margin-top:8px;">Confirm Order</button>
+    </div>
+  `;
+
+  el.querySelectorAll<HTMLButtonElement>("button[data-idx]").forEach(
+    (btn) => {
+      btn.addEventListener("click", () => {
+        const i = Number(btn.dataset.idx);
+        const j = btn.dataset.dir === "up" ? i - 1 : i + 1;
+        const next = order.slice();
+        [next[i], next[j]] = [next[j], next[i]];
+        setOrder(next);
+      });
+    },
+  );
+  el.querySelector("#forecast-confirm")?.addEventListener("click", () => {
+    dispatch({ type: "resolve-forecast", order });
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Discard modal (forced, hand over limit)
 // ---------------------------------------------------------------------------
 
@@ -384,8 +563,12 @@ export function renderDiscardModal(
   const items = me.hand
     .map((c) => {
       const label =
-        c.type === "epidemic" ? "⚠️ Epidemic" : CITY_MAP[c.city].name;
-      return `<div class="hand-card"><span>${label}</span><button data-uid="${c.uid}">Discard</button></div>`;
+        c.type === "epidemic"
+          ? "⚠️ Epidemic"
+          : c.type === "event"
+            ? `🃏 ${eventName(c.event)}`
+            : CITY_MAP[c.city].name;
+      return `<div class="hand-card"><span>${escapeHtml(label)}</span><button data-uid="${c.uid}">Discard</button></div>`;
     })
     .join("");
 
@@ -417,6 +600,14 @@ export function renderHelpOverlay(el: HTMLElement, onClose: () => void) {
     </div>
   `,
   ).join("");
+  const eventItems = EVENTS.map(
+    (e) => `
+    <div class="help-role">
+      <div class="help-role-name">🃏 ${e.name}</div>
+      <div class="help-role-desc">${e.description}</div>
+    </div>
+  `,
+  ).join("");
 
   el.style.display = "flex";
   el.innerHTML = `
@@ -428,9 +619,12 @@ export function renderHelpOverlay(el: HTMLElement, onClose: () => void) {
         <li>Click a city on the map to see the actions available there. Cities connected to your current location are outlined in blue.</li>
         <li>After actions, draw 2 player cards (watch for Epidemic cards) and resolve that many infection cards.</li>
         <li>Cure all four strains to win. Too many outbreaks, running out of disease cubes, or an empty player deck ends the game in a loss.</li>
+        <li>Event cards (🃏 in your hand) can be played anytime — even outside your turn — and never cost an action.</li>
       </ul>
       <h3>Roles</h3>
       <div class="help-roles">${roleItems}</div>
+      <h3>Event Cards</h3>
+      <div class="help-roles">${eventItems}</div>
     </div>
   `;
   el.querySelector("#help-close")?.addEventListener("click", onClose);

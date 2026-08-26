@@ -14,10 +14,16 @@ import {
   RoleId,
   ROLES,
   HAND_LIMIT,
+  EVENTS,
+  EventId,
+  DEFAULT_EPIDEMIC_COUNT,
 } from "../../shared/src/types.js";
 
 const REGIONS: RegionId[] = ["azure", "crimson", "amber", "verdant"];
-const EPIDEMIC_COUNT = 5;
+const VALID_EPIDEMIC_COUNTS = new Set([4, 5, 6]);
+function normalizeEpidemicCount(n: number): number {
+  return VALID_EPIDEMIC_COUNTS.has(n) ? n : DEFAULT_EPIDEMIC_COUNT;
+}
 const INFECTION_RATE_TRACK = [2, 2, 2, 3, 3, 4, 4];
 const OUTBREAK_MAX = 8;
 const DEAL_SIZE: Record<number, number> = {
@@ -90,8 +96,20 @@ export function createRoom(roomId: string): Room {
     log: [],
     pendingDiscard: null,
     epidemicsResolved: 0,
+    epidemicCount: DEFAULT_EPIDEMIC_COUNT,
+    oneQuietNightActive: false,
+    pendingForecast: null,
   };
   return { state, internal: null };
+}
+
+// Lobby-only: lets any seated player choose the difficulty (Epidemic count)
+// before Start Game is pressed. Mirrors the physical game's difficulty dial.
+export function setEpidemicCount(room: Room, count: number): string | null {
+  if (room.state.phase !== "lobby")
+    return "Difficulty can only be changed before the game starts.";
+  room.state.epidemicCount = normalizeEpidemicCount(count);
+  return null;
 }
 
 export function addPlayer(
@@ -154,24 +172,29 @@ export function startGame(room: Room): string | null {
     }
   }
 
-  // Player deck: one card per city, shuffled, hands dealt, epidemics seeded
-  const cityCards: PlayerCard[] = shuffle(
-    CITIES.map(
-      (c) => ({ type: "city", city: c.id, uid: randomUUID() }) as const,
-    ),
+  // Player deck: one card per city plus the 5 Event cards, shuffled together
+  // exactly like city cards (they can be dealt into a starting hand or drawn
+  // later), hands dealt, then epidemics seeded per the chosen difficulty.
+  const cityCards: PlayerCard[] = CITIES.map(
+    (c) => ({ type: "city", city: c.id, uid: randomUUID() }) as const,
   );
+  const eventCards: PlayerCard[] = EVENTS.map(
+    (e) => ({ type: "event", event: e.id, uid: randomUUID() }) as const,
+  );
+  const regularCards: PlayerCard[] = shuffle([...cityCards, ...eventCards]);
   const dealSize = DEAL_SIZE[state.players.length] ?? 2;
   for (const p of state.players) {
     for (let i = 0; i < dealSize; i++) {
-      const card = cityCards.pop();
+      const card = regularCards.pop();
       if (card) p.hand.push(card);
     }
   }
+  const epidemicCount = normalizeEpidemicCount(state.epidemicCount);
   const piles: PlayerCard[][] = Array.from(
-    { length: EPIDEMIC_COUNT },
+    { length: epidemicCount },
     () => [],
   );
-  cityCards.forEach((card, i) => piles[i % EPIDEMIC_COUNT].push(card));
+  regularCards.forEach((card, i) => piles[i % epidemicCount].push(card));
   const deckWithEpidemics: PlayerCard[] = [];
   for (const pile of piles) {
     const withEpidemic = shuffle([
@@ -189,6 +212,7 @@ export function startGame(room: Room): string | null {
   state.actionsRemaining = 4;
   state.playerDeckSize = internal.playerDeck.length;
   state.infectionDeckSize = internal.infectionDeck.length;
+  state.epidemicCount = epidemicCount;
   state.phase = "playing";
   log(state, "The outbreak response begins. Good luck.");
   return null;
@@ -327,6 +351,11 @@ function resolveEpidemic(room: Room) {
 function infectionStep(room: Room) {
   const { state, internal } = room;
   if (!internal || isLost(state)) return;
+  if (state.oneQuietNightActive) {
+    state.oneQuietNightActive = false;
+    log(state, "One Quiet Night — the infection step is skipped.");
+    return;
+  }
   for (let i = 0; i < state.infectionRate; i++) {
     const cityId = internal.infectionDeck.pop();
     if (!cityId) break; // deck exhaustion is not a loss here
@@ -387,7 +416,7 @@ export function forfeitPlayer(room: Room, playerId: string): void {
     while (player.hand.length > state.pendingDiscard.mustDiscardTo) {
       const idx = player.hand.findIndex((c) => c.type === "city");
       const [card] = player.hand.splice(idx === -1 ? 0 : idx, 1);
-      if (card.type === "city") state.playerDiscard.push(card);
+      if (isDiscardable(card)) state.playerDiscard.push(card);
     }
     log(state, `${player.name} disconnected — their hand was auto-discarded.`);
     state.pendingDiscard = null;
@@ -414,6 +443,35 @@ function findCardIndex(
   return hand.findIndex(predicate);
 }
 
+// City and Event cards go to the discard pile when discarded/played;
+// Epidemic cards never sit in a hand long enough to be discarded this way.
+function isDiscardable(card: PlayerCard): boolean {
+  return card.type === "city" || card.type === "event";
+}
+
+const EVENT_FOR_ACTION: Record<string, EventId> = {
+  "play-government-grant": "government-grant",
+  "play-airlift": "airlift",
+  "play-forecast": "forecast",
+  "play-resilient-population": "resilient-population",
+  "play-one-quiet-night": "one-quiet-night",
+};
+
+// All five "play-*" event actions carry a cardUid; pull it out without an
+// `any` cast so the switch below still gets full narrowing on `action`.
+function eventCardUid(action: PlayerAction): string | null {
+  switch (action.type) {
+    case "play-government-grant":
+    case "play-airlift":
+    case "play-forecast":
+    case "play-resilient-population":
+    case "play-one-quiet-night":
+      return action.cardUid;
+    default:
+      return null;
+  }
+}
+
 export function applyAction(
   room: Room,
   playerId: string,
@@ -432,12 +490,130 @@ export function applyAction(
     const idx = findCardIndex(player.hand, (c) => c.uid === action.cardUid);
     if (idx === -1) return "Card not in hand.";
     const [card] = player.hand.splice(idx, 1);
-    if (card.type === "city") state.playerDiscard.push(card);
+    if (isDiscardable(card)) state.playerDiscard.push(card);
     log(state, `${player.name} discarded a card.`);
     if (player.hand.length <= state.pendingDiscard.mustDiscardTo) {
       state.pendingDiscard = null;
       finishTurn(room);
     }
+    return null;
+  }
+
+  // ------------------------------------------------------------------
+  // Event cards: playable by whoever holds them at any time — not just
+  // on their own turn, and never spending an action — matching the
+  // physical game. Placed ahead of the turn/action gates below.
+  // ------------------------------------------------------------------
+  if (action.type in EVENT_FOR_ACTION) {
+    const wantedEvent = EVENT_FOR_ACTION[action.type];
+    const cardUid = eventCardUid(action);
+    const idx = findCardIndex(
+      player.hand,
+      (c) => c.type === "event" && c.uid === cardUid,
+    );
+    if (idx === -1) return "You do not hold that event card.";
+    const card = player.hand[idx];
+    if (card.type !== "event" || card.event !== wantedEvent) {
+      return "That card doesn't match this event.";
+    }
+
+    switch (action.type) {
+      case "play-government-grant": {
+        if (!CITY_MAP[action.city]) return "Unknown city.";
+        if (state.researchStations.includes(action.city))
+          return "A research station already exists there.";
+        state.researchStations.push(action.city);
+        log(
+          state,
+          `${player.name} played Government Grant — a research station rises in ${CITY_MAP[action.city].name}.`,
+        );
+        break;
+      }
+      case "play-airlift": {
+        const target = state.players.find((p) => p.id === action.playerId);
+        if (!target) return "Unknown player.";
+        if (!CITY_MAP[action.to]) return "Unknown city.";
+        target.location = action.to;
+        log(
+          state,
+          `${player.name} played Airlift — ${target.name} is moved to ${CITY_MAP[action.to].name}.`,
+        );
+        break;
+      }
+      case "play-forecast": {
+        if (!internal) return "Game not initialized.";
+        if (state.pendingForecast) return "A Forecast is already pending.";
+        const n = Math.min(6, internal.infectionDeck.length);
+        // internal.infectionDeck's *end* is the top (drawn first via pop());
+        // reversing that slice gives it in actual draw order.
+        const top = internal.infectionDeck.slice(-n).reverse();
+        state.pendingForecast = { playerId, cities: top };
+        log(
+          state,
+          `${player.name} played Forecast — the team peeks at the top of the Infection Deck.`,
+        );
+        break;
+      }
+      case "play-resilient-population": {
+        const dIdx = state.infectionDiscard.indexOf(action.cityId);
+        if (dIdx === -1)
+          return "That city is not in the infection discard pile.";
+        state.infectionDiscard.splice(dIdx, 1);
+        log(
+          state,
+          `${player.name} played Resilient Population — ${CITY_MAP[action.cityId].name} is removed from the game.`,
+        );
+        break;
+      }
+      case "play-one-quiet-night": {
+        state.oneQuietNightActive = true;
+        log(
+          state,
+          `${player.name} played One Quiet Night — the next infection step will be skipped.`,
+        );
+        break;
+      }
+    }
+
+    player.hand.splice(idx, 1);
+    state.playerDiscard.push(card);
+
+    // Playing an event card shrinks your hand — if that clears your own
+    // pending forced discard, resolve it immediately.
+    if (
+      state.pendingDiscard &&
+      state.pendingDiscard.playerId === playerId &&
+      player.hand.length <= state.pendingDiscard.mustDiscardTo
+    ) {
+      state.pendingDiscard = null;
+      finishTurn(room);
+    }
+    return null;
+  }
+
+  if (action.type === "resolve-forecast") {
+    if (!internal) return "Game not initialized.";
+    if (!state.pendingForecast) return "No Forecast is pending.";
+    if (state.pendingForecast.playerId !== playerId) {
+      return "Only the player who played Forecast can set the new order.";
+    }
+    const { cities } = state.pendingForecast;
+    const validPermutation =
+      action.order.length === cities.length &&
+      new Set(action.order).size === cities.length &&
+      action.order.every((c) => cities.includes(c));
+    if (!validPermutation) {
+      return "The new order must contain exactly the revealed cities.";
+    }
+    const n = cities.length;
+    // order[0] should be drawn next -> lands at the end of the array (top).
+    internal.infectionDeck.splice(
+      internal.infectionDeck.length - n,
+      n,
+      ...action.order.slice().reverse(),
+    );
+    state.pendingForecast = null;
+    log(state, `${player.name} rearranged the top of the Infection Deck.`);
     return null;
   }
 

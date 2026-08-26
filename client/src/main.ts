@@ -1,4 +1,10 @@
-import type { GameState, PlayerAction, RegionId } from "../../shared/src/types";
+import type {
+  GameState,
+  PlayerAction,
+  RegionId,
+  EventId,
+} from "../../shared/src/types";
+import { DIFFICULTIES } from "../../shared/src/types";
 import { socket } from "./ws";
 import {
   renderMap,
@@ -11,6 +17,8 @@ import {
   renderCityPopup,
   renderCureModal,
   renderDiscardModal,
+  renderEventModal,
+  renderForecastOverlay,
   renderGameOver,
   renderHelpOverlay,
 } from "./ui";
@@ -80,6 +88,19 @@ function renderLobbyScreen() {
               )
               .join("")}
           </div>
+          <div class="field">
+            <label>Difficulty</label>
+            <div class="difficulty-picker">
+              ${DIFFICULTIES.map(
+                (d) => `
+                <button
+                  class="difficulty-option ${gameState!.epidemicCount === d.epidemicCount ? "selected" : ""}"
+                  data-epidemic-count="${d.epidemicCount}"
+                  title="${escapeHtml(d.description)}"
+                >${escapeHtml(d.label)}<span>${d.epidemicCount} epidemics</span></button>`,
+              ).join("")}
+            </div>
+          </div>
           <button class="btn-primary" id="start-btn" ${gameState!.players.length < 2 ? "disabled" : ""}>
             ${gameState!.players.length < 2 ? "Need 2+ players" : "Start Game"}
           </button>
@@ -88,6 +109,17 @@ function renderLobbyScreen() {
       </div>
     </div>
   `;
+
+  document.querySelectorAll<HTMLButtonElement>("[data-epidemic-count]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (!gameState) return;
+      socket.send({
+        type: "set_epidemic_count",
+        roomId: gameState.roomId,
+        epidemicCount: Number(btn.dataset.epidemicCount),
+      });
+    });
+  });
 
   document.getElementById("join-btn")?.addEventListener("click", () => {
     const name =
@@ -152,6 +184,7 @@ function buildGameShellOnce() {
       <div class="sidebar" id="sidebar"></div>
     </div>
     <div class="discard-overlay" id="discard-overlay" style="display:none;"></div>
+    <div class="discard-overlay" id="event-overlay" style="display:none;"></div>
     <div class="help-overlay" id="help-overlay" style="display:none;"></div>
     <div class="gameover-overlay" id="gameover-overlay" style="display:none;"></div>
   `;
@@ -215,6 +248,61 @@ function onCureNeeded(region: RegionId) {
   });
 }
 
+let pendingEvent: { cardUid: string; event: EventId } | null = null;
+let forecastOrder: string[] | null = null;
+
+function onPlayEvent(cardUid: string, event: EventId) {
+  pendingEvent = { cardUid, event };
+  renderEventOverlay();
+}
+
+function renderEventOverlay() {
+  if (!gameState || !myPlayerId) return;
+  const overlay = document.getElementById("event-overlay")!;
+  if (!pendingEvent) {
+    overlay.style.display = "none";
+    overlay.innerHTML = "";
+    return;
+  }
+  renderEventModal(
+    overlay,
+    gameState,
+    myPlayerId,
+    pendingEvent.cardUid,
+    pendingEvent.event,
+    dispatch,
+    () => {
+      pendingEvent = null;
+      overlay.style.display = "none";
+      overlay.innerHTML = "";
+    },
+  );
+}
+
+function renderForecastIfNeeded() {
+  if (!gameState || !myPlayerId) return;
+  const overlay = document.getElementById("event-overlay")!;
+  if (
+    !gameState.pendingForecast ||
+    gameState.pendingForecast.playerId !== myPlayerId
+  ) {
+    forecastOrder = null;
+    return;
+  }
+  if (!forecastOrder) forecastOrder = gameState.pendingForecast.cities.slice();
+  renderForecastOverlay(
+    overlay,
+    gameState,
+    myPlayerId,
+    forecastOrder,
+    (next) => {
+      forecastOrder = next;
+      renderForecastIfNeeded();
+    },
+    dispatch,
+  );
+}
+
 function onCityClick(cityId: string, evt: MouseEvent) {
   if (!gameState || !myPlayerId) return;
   selectedCity = cityId;
@@ -271,6 +359,7 @@ function renderGameScreen() {
     gameState,
     myPlayerId,
     dispatch,
+    onPlayEvent,
   );
   renderDiscardModal(
     document.getElementById("discard-overlay")!,
@@ -278,6 +367,7 @@ function renderGameScreen() {
     myPlayerId,
     dispatch,
   );
+  renderForecastIfNeeded();
   renderGameOver(document.getElementById("gameover-overlay")!, gameState);
 
   const dot = document.getElementById("conn-dot");

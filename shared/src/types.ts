@@ -29,6 +29,52 @@ export interface RoleDef {
   description: string;
 }
 
+export type EventId =
+  | "government-grant"
+  | "airlift"
+  | "forecast"
+  | "resilient-population"
+  | "one-quiet-night";
+
+export interface EventDef {
+  id: EventId;
+  name: string;
+  description: string;
+}
+
+// One copy of each — matches the real game's 5 Event cards, mixed into the
+// player deck alongside city cards (and, like city cards, can be dealt into
+// a starting hand or drawn later).
+export const EVENTS: EventDef[] = [
+  {
+    id: "government-grant",
+    name: "Government Grant",
+    description: "Build a research station in any city, no card required.",
+  },
+  {
+    id: "airlift",
+    name: "Airlift",
+    description: "Move any player to any city.",
+  },
+  {
+    id: "forecast",
+    name: "Forecast",
+    description:
+      "Look at the top 6 cards of the Infection Deck and rearrange them in any order.",
+  },
+  {
+    id: "resilient-population",
+    name: "Resilient Population",
+    description:
+      "Remove any one card in the Infection Discard Pile from the game.",
+  },
+  {
+    id: "one-quiet-night",
+    name: "One Quiet Night",
+    description: "Skip the next infection step entirely.",
+  },
+];
+
 export interface PlayerCardCity {
   type: "city";
   city: string;
@@ -36,7 +82,15 @@ export interface PlayerCardCity {
 export interface PlayerCardEpidemic {
   type: "epidemic";
 }
-export type PlayerCard = (PlayerCardCity | PlayerCardEpidemic) & {
+export interface PlayerCardEvent {
+  type: "event";
+  event: EventId;
+}
+export type PlayerCard = (
+  | PlayerCardCity
+  | PlayerCardEpidemic
+  | PlayerCardEvent
+) & {
   uid: string;
 };
 
@@ -50,6 +104,31 @@ export interface Player {
 }
 
 export type DiseaseState = "active" | "cured" | "eradicated";
+
+// Epidemic card count selects difficulty, same as the physical game.
+export interface DifficultyDef {
+  epidemicCount: number;
+  label: string;
+  description: string;
+}
+export const DIFFICULTIES: DifficultyDef[] = [
+  {
+    epidemicCount: 4,
+    label: "Introductory",
+    description: "4 Epidemic cards — gentlest pace.",
+  },
+  {
+    epidemicCount: 5,
+    label: "Standard",
+    description: "5 Epidemic cards — the default challenge.",
+  },
+  {
+    epidemicCount: 6,
+    label: "Heroic",
+    description: "6 Epidemic cards — brutal escalation.",
+  },
+];
+export const DEFAULT_EPIDEMIC_COUNT = 5;
 
 export interface GameState {
   roomId: string;
@@ -76,6 +155,11 @@ export interface GameState {
   lossReason?: string;
   pendingDiscard?: { playerId: string; mustDiscardTo: number } | null;
   epidemicsResolved: number;
+  epidemicCount: number; // chosen difficulty; editable in the lobby, fixed once playing
+  oneQuietNightActive: boolean; // next infection step will be skipped
+  // Forecast: top-of-deck cities revealed (draw order, [0] drawn next) for
+  // the acting player to rearrange before it's applied.
+  pendingForecast: { playerId: string; cities: string[] } | null;
 }
 
 export interface LogEntry {
@@ -105,11 +189,18 @@ export type PlayerAction =
     }
   | { type: "discover-cure"; region: RegionId; cardUids: string[] }
   | { type: "discard"; cardUid: string }
-  | { type: "end-turn" };
+  | { type: "end-turn" }
+  | { type: "play-government-grant"; cardUid: string; city: string }
+  | { type: "play-airlift"; cardUid: string; playerId: string; to: string }
+  | { type: "play-forecast"; cardUid: string }
+  | { type: "resolve-forecast"; order: string[] }
+  | { type: "play-resilient-population"; cardUid: string; cityId: string }
+  | { type: "play-one-quiet-night"; cardUid: string };
 
 export type ClientMessage =
   | { type: "join_room"; roomId: string; playerName: string; playerId?: string }
   | { type: "start_game"; roomId: string }
+  | { type: "set_epidemic_count"; roomId: string; epidemicCount: number }
   | {
       type: "player_action";
       roomId: string;

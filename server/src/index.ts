@@ -6,6 +6,7 @@ import {
   applyAction,
   startGame,
   forfeitPlayer,
+  setEpidemicCount,
 } from "./gameState.js";
 import {
   getOrCreateRoom,
@@ -100,6 +101,21 @@ wss.on("connection", (ws: WebSocket) => {
           return;
         }
         const err = startGame(room);
+        if (err) {
+          send(ws, { type: "error", message: err });
+          return;
+        }
+        broadcastState(msg.roomId);
+        break;
+      }
+
+      case "set_epidemic_count": {
+        const room = getRoom(msg.roomId);
+        if (!room) {
+          send(ws, { type: "error", message: "Room not found." });
+          return;
+        }
+        const err = setEpidemicCount(room, msg.epidemicCount);
         if (err) {
           send(ws, { type: "error", message: err });
           return;

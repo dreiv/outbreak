@@ -24,6 +24,8 @@ Navigate the interactive SVG map by clicking any city—the UI will intelligentl
 - **Your Turn:** Spend up to 4 actions to move (drive/ferry, direct flight, charter flight, or shuttle), treat diseases, build research stations, share knowledge, or discover a cure.
 - **Escalating Threat:** After acting, draw 2 cards. Beware of Epidemics that accelerate infection rates and intensify the crisis. The board then infects cities—if a city receives a 4th disease cube, it triggers a cascading **outbreak** into neighboring cities.
 - **Unique Roles:** Players are randomly assigned one of 7 distinct specialists (e.g., Field Medic, Virologist, Logistics Chief), each bringing a crucial passive ability to the team.
+- **Event Cards:** 5 special cards (Government Grant, Airlift, Forecast, Resilient Population, One Quiet Night) are mixed into the player deck. Anyone holding one can play it at any time — even outside their own turn — for free, from the "Your Hand" panel. These are the team's main lever for recovering from a bad Epidemic; use them.
+- **Difficulty:** Before starting, the lobby lets any seated player pick Introductory (4 Epidemic cards), Standard (5), or Heroic (6) — same dial as the physical game.
 - **Win or Lose:** Victory is achieved by curing all 4 disease strains. You lose if the outbreak counter maxes out, a disease cube supply is exhausted, or the player deck runs empty.
 
 ## Architecture & Scripts
@@ -33,5 +35,6 @@ The game relies on an authoritative server model where clients never resolve gam
 - `/shared`: TypeScript types and board data imported by both client and server to prevent state drift.
 - `/server`: Node.js + WebSocket server holding the authoritative, in-memory GameState per room.
 - `/client`: Vite + TypeScript frontend rendering the interactive SVG board and game UI.
+- `/sim`: A headless simulation harness (`npx tsx sim/run.ts [games] [players] [epidemicCount]`) that drives the real server engine with a heuristic bot — useful for regression-testing balance changes without a browser. Not part of the shipped app.
 
 To build and run for production, use `npm run build`, then run `npm start --workspace server`.
