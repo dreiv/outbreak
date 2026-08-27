@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import Redis from "ioredis";
+import { Redis } from "ioredis";
 import { Room, RoomInternal, createRoom } from "./gameState.js";
 
 interface Sockets {
@@ -35,7 +35,7 @@ if (!redis) {
       "a Render Key Value/Redis instance) to persist rooms across restarts.",
   );
 } else {
-  redis.on("error", (err) => {
+  redis.on("error", (err: Error) => {
     console.error("[rooms] Redis error:", err.message);
   });
 }
@@ -78,7 +78,7 @@ export function persistRoom(roomId: string): void {
   const payload = JSON.stringify(serializeRoom(room));
   redis
     .set(ROOM_KEY_PREFIX + roomId, payload, "EX", ROOM_TTL_SECONDS)
-    .catch((err) =>
+    .catch((err: unknown) =>
       console.error("[rooms] failed to persist room:", roomId, err),
     );
 }
@@ -87,7 +87,7 @@ async function deleteRoomFromRedis(roomId: string): Promise<void> {
   if (!redis) return;
   try {
     await redis.del(ROOM_KEY_PREFIX + roomId);
-  } catch (err) {
+  } catch (err: unknown) {
     console.error("[rooms] failed to delete persisted room:", roomId, err);
   }
 }
@@ -108,7 +108,7 @@ export async function hydrateRoomsFromRedis(): Promise<void> {
     if (keys.length) {
       console.log(`[rooms] rehydrated ${keys.length} room(s) from Redis`);
     }
-  } catch (err) {
+  } catch (err: unknown) {
     console.error("[rooms] failed to hydrate rooms from Redis:", err);
   }
 }
