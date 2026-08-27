@@ -2,8 +2,20 @@ import type { ClientMessage, ServerMessage } from "../../shared/src/types";
 
 type Handler = (msg: ServerMessage) => void;
 
-const WS_URL =
-  (import.meta as any).env?.VITE_WS_URL || `ws://${location.hostname}:8787`;
+// VITE_WS_URL is the primary way to point the client at the server once
+// they're deployed separately (e.g. client as a Render Static Site, server
+// as its own Render Web Service) — set it at build time to the server's
+// public wss:// URL. The fallback below is for local dev only, and now
+// mirrors the page's protocol: an https page always falls back to wss, an
+// http page to ws. Without this, an https-deployed client with a missing
+// VITE_WS_URL would silently fail (browsers block plain ws:// "mixed
+// content" from an https:// page) instead of failing loudly.
+function defaultWsUrl(): string {
+  const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+  return `${protocol}//${location.hostname}:8787`;
+}
+
+const WS_URL = (import.meta as any).env?.VITE_WS_URL || defaultWsUrl();
 const HEARTBEAT_INTERVAL_MS = 20000;
 
 export class GameSocket {

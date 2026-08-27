@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { createServer } from "node:http";
 import { WebSocketServer, WebSocket } from "ws";
 import type { ClientMessage, ServerMessage } from "../../shared/src/types.js";
 import {
@@ -16,12 +17,29 @@ import {
   broadcast,
   destroyRoomIfEmpty,
   scheduleGraceExpiry,
+  persistRoom,
+  hydrateRoomsFromRedis,
 } from "./rooms.js";
 
 const PORT = Number(process.env.PORT) || 8787;
 const GRACE_PERIOD_MS = 2 * 60 * 1000; // reconnect window before a seat is forfeited
 const MAX_MESSAGE_BYTES = 32 * 1024; // covers a full state sync; caps abusive clients
-const wss = new WebSocketServer({ port: PORT, maxPayload: MAX_MESSAGE_BYTES });
+
+// A bare `new WebSocketServer({ port })` only speaks the WS upgrade
+// handshake — any plain HTTP request (e.g. Render's health check hitting
+// "/") gets a raw "426 Upgrade Required" with no body, which Render (and
+// most platforms) treats as an unhealthy service and cycles the instance.
+// Run an explicit HTTP server and only hand WS upgrade requests off to the
+// WebSocketServer, so plain GETs get back a normal 200.
+const httpServer = createServer((req, res) => {
+  res.writeHead(200, { "content-type": "text/plain" });
+  res.end("outbreak-server ok");
+});
+
+const wss = new WebSocketServer({
+  server: httpServer,
+  maxPayload: MAX_MESSAGE_BYTES,
+});
 
 interface ConnMeta {
   roomId: string | null;
@@ -39,6 +57,9 @@ function broadcastState(roomId: string) {
     type: "state_diff",
     state: room.state,
   } satisfies ServerMessage);
+  // Write-through to Redis (no-op if REDIS_URL isn't set) so a restart
+  // resumes the game instead of losing it. See rooms.ts.
+  persistRoom(roomId);
 }
 
 wss.on("connection", (ws: WebSocket) => {
@@ -163,4 +184,19 @@ wss.on("connection", (ws: WebSocket) => {
   });
 });
 
-console.log(`[outbreak-server] listening on ws://localhost:${PORT}`);
+async function main() {
+  // Pull back any rooms a previous process had persisted before we start
+  // accepting connections, so reconnecting players land in the same game.
+  await hydrateRoomsFromRedis();
+
+  httpServer.listen(PORT, () => {
+    console.log(
+      `[outbreak-server] listening on :${PORT} (http health check + ws)`,
+    );
+  });
+}
+
+main().catch((err) => {
+  console.error("[outbreak-server] failed to start:", err);
+  process.exit(1);
+});

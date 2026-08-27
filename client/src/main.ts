@@ -1,3 +1,4 @@
+
 import type {
   GameState,
   PlayerAction,
@@ -50,6 +51,48 @@ function dispatch(action: PlayerAction) {
 }
 
 // ---------------------------------------------------------------------------
+// Connecting screen
+// ---------------------------------------------------------------------------
+// Shown before we've ever gotten a state_sync back. Render's free tier can
+// take 30-50s to wake a sleeping instance, and without this the visitor
+// just sees a blank page (or, worse, the lobby form) with no sign anything
+// is happening until the socket finally opens.
+
+function renderConnectingScreen() {
+  const isRetrying = connStatus === "closed";
+  app.innerHTML = `
+    <style>
+      .connect-spinner {
+        width: 28px;
+        height: 28px;
+        margin: 18px auto 0;
+        border-radius: 50%;
+        border: 3px solid rgba(255,255,255,0.15);
+        border-top-color: var(--accent, #4f8cff);
+        animation: connect-spin 0.8s linear infinite;
+      }
+      @keyframes connect-spin {
+        to { transform: rotate(360deg); }
+      }
+    </style>
+    <div class="lobby-screen">
+      <div class="lobby-card" style="text-align:center;">
+        <h1>🧬 Outbreak Protocol</h1>
+        <p class="tagline">${isRetrying ? "Reconnecting…" : "Connecting to server…"}</p>
+        <div class="connect-spinner" aria-hidden="true"></div>
+        <p style="color:var(--text-dim); font-size:12px; margin-top:14px;">
+          ${
+            isRetrying
+              ? "Lost the connection — retrying automatically."
+              : "If this is the first request in a while, the server may need up to a minute to wake up."
+          }
+        </p>
+      </div>
+    </div>
+  `;
+}
+
+// ---------------------------------------------------------------------------
 // Lobby screen
 // ---------------------------------------------------------------------------
 
@@ -73,7 +116,9 @@ function renderLobbyScreen() {
             <label>Room code</label>
             <input id="room-input" type="text" value="${escapeHtml(roomId ?? "")}" placeholder="e.g. bravo-19" maxlength="24" />
           </div>
-          <button class="btn-primary" id="join-btn">Join / Create Room</button>
+          <button class="btn-primary" id="join-btn" ${connStatus !== "open" ? "disabled" : ""}>
+            ${connStatus === "open" ? "Join / Create Room" : "Reconnecting…"}
+          </button>
         `
             : `
           <p style="color:var(--text-dim); font-size:13px;">Room: <b style="color:var(--text)">${escapeHtml(gameState!.roomId)}</b> — share this code with your team.</p>
@@ -406,6 +451,19 @@ function renderGameScreen() {
 // ---------------------------------------------------------------------------
 
 function render() {
+  // Before we've ever received a state_sync, show a dedicated connecting
+  // screen instead of the lobby form — closes the "no loader on cold
+  // start" gap (Render free-tier wake-ups can take 30-50s).
+  if (!gameState && connStatus !== "open") {
+    if (gameShellBuilt) {
+      mapController?.destroy();
+      mapController = null;
+    }
+    gameShellBuilt = false;
+    renderConnectingScreen();
+    return;
+  }
+
   if (screen === "lobby") {
     if (gameShellBuilt) {
       mapController?.destroy();
@@ -420,7 +478,7 @@ function render() {
 
 socket.onStatus((s) => {
   connStatus = s;
-  if (screen === "game") render();
+  render();
 });
 
 socket.onMessage((msg) => {
