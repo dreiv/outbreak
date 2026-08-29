@@ -1,4 +1,4 @@
-// Regenerates client/src/worldLand.ts from the `world-atlas` 110m dataset.
+// Regenerates client/src/assets/worldLand.ts from the `world-atlas` 110m dataset.
 // Uses d3-geo's geoPath/geoEquirectangular (not a hand-rolled per-point
 // projection) so polygons crossing the ±180° antimeridian clip correctly
 // instead of tearing into a broken horizontal streak. The projection matches
@@ -16,7 +16,7 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const topoPath = path.join(__dirname, '..', 'node_modules', 'world-atlas', 'land-110m.json');
-const outPath = path.join(__dirname, '..', 'client', 'src', 'worldLand.ts');
+const outPath = path.join(__dirname, '..', 'client', 'src', 'assets', 'worldLand.ts');
 
 // Must match MAP_WIDTH / MAP_HEIGHT / project() in shared/src/boardData.ts.
 const W = 1000;

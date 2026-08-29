@@ -1,0 +1,171 @@
+.game-shell {
+  position: relative; /* anchors .game-error-toast */
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  grid-template-rows: auto 1fr;
+  height: 100vh;
+  /* Grid items default to min-height:auto; without this the sidebar content
+     can force the row taller than the viewport and push the topbar off. */
+  min-height: 0;
+}
+
+.topbar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 18px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.topbar .brand {
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  font-size: 15px;
+}
+.topbar-mid {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.help-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.help-btn:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.mute-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.mute-btn:hover {
+  border-color: var(--accent);
+}
+.topbar .conn-status {
+  font-size: 12px;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.topbar .conn-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--good);
+}
+.topbar .conn-dot.bad {
+  background: var(--danger);
+}
+.topbar .conn-dot.connecting {
+  background: var(--warn);
+}
+
+.legend {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.legend .item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.legend .swatch-sm {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.map-wrap {
+  position: relative;
+  overflow: hidden;
+  min-height: 0; /* same grid-row-overflow fix as .game-shell */
+  background: radial-gradient(ellipse at center, #0e1830 0%, #070d18 100%);
+  touch-action: none; /* let panzoom own touch gestures (pinch/drag) */
+}
+
+.map-wrap svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: grab;
+}
+.map-wrap svg:active {
+  cursor: grabbing;
+}
+
+.game-error-toast {
+  position: absolute;
+  top: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #3a1420;
+  border: 1px solid #5c1f2c;
+  color: #ffb4bf;
+  padding: 8px 10px 8px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  max-width: min(480px, calc(100vw - 32px));
+}
+
+.game-error-toast button {
+  background: transparent;
+  border: none;
+  color: #ffb4bf;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 2px 4px;
+  opacity: 0.8;
+}
+.game-error-toast button:hover {
+  opacity: 1;
+}
+
+@media (max-width: 860px) {
+  .game-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr auto;
+  }
+  .sidebar {
+    border-left: none;
+    border-top: 1px solid var(--border);
+    max-height: 40vh;
+  }
+  .legend {
+    /* Redundant with the color-coded cube badges; no room in a narrow topbar.
+       Same info is in the sidebar's disease tracker. */
+    display: none;
+  }
+}

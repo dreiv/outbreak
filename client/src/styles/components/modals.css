@@ -1,0 +1,228 @@
+.discard-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 8, 16, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+.discard-modal {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  width: min(420px, 92vw);
+}
+.discard-modal h3 {
+  margin-top: 0;
+}
+
+.modal-hint {
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.cure-select-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 260px;
+  overflow-y: auto;
+  margin: 10px 0;
+}
+.cure-select-list label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.help-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 8, 16, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 55;
+}
+.help-modal {
+  position: relative;
+  width: min(520px, 92vw);
+  max-height: 82vh;
+  overflow-y: auto;
+}
+.help-modal .close-btn {
+  /* Pinned to the corner, the conventional modal close spot. */
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    color 0.15s;
+}
+.help-modal .close-btn:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.help-modal h3:first-of-type {
+  margin-top: 0;
+}
+.help-list {
+  padding-left: 18px;
+  margin: 0 0 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.help-list li {
+  line-height: 1.4;
+}
+.help-roles {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.help-role {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.help-role-name {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--accent);
+}
+.help-role-desc {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+.gameover-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 8, 16, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+  text-align: center;
+}
+.gameover-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 32px;
+  width: min(460px, 92vw);
+  animation: go-pop 0.35s ease-out;
+}
+@keyframes go-pop {
+  0% {
+    transform: scale(0.92);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.go-icon {
+  font-size: 40px;
+  margin-bottom: 4px;
+}
+.gameover-card h1 {
+  font-size: 26px;
+  margin: 0 0 6px;
+}
+.gameover-card.won h1 {
+  color: var(--good);
+}
+.gameover-card.lost h1 {
+  color: var(--danger);
+}
+.gameover-card.won {
+  box-shadow: 0 0 60px rgba(34, 197, 94, 0.18);
+}
+.gameover-card.lost {
+  box-shadow: 0 0 60px rgba(239, 68, 68, 0.18);
+}
+.go-sub {
+  color: var(--text-dim);
+  font-size: 13.5px;
+  margin: 0 0 18px;
+}
+
+.go-strains {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+.go-strain {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 5px 10px;
+  font-size: 12px;
+}
+.go-strain .swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+.go-strain-icon {
+  font-weight: 700;
+}
+.go-strain.cured .go-strain-icon,
+.go-strain.eradicated .go-strain-icon {
+  color: var(--good);
+}
+.go-strain.active .go-strain-icon {
+  color: var(--danger);
+}
+
+.go-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 22px;
+}
+.go-stat {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.go-stat b {
+  font-size: 18px;
+}
+.go-stat span {
+  font-size: 10px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}

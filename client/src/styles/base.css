@@ -1,0 +1,86 @@
+:root {
+  --bg: #0b1220;
+  --panel: #121b2e;
+  --panel-2: #17233a;
+  --border: #24314c;
+  --text: #e7edf7;
+  --text-dim: #93a2c0;
+  --accent: #5eb4ff;
+  --danger: #ef4444;
+  --warn: #f59e0b;
+  --good: #22c55e;
+
+  --azure: #3b82f6;
+  --crimson: #ef4444;
+  --amber: #f59e0b;
+  --verdant: #22c55e;
+
+  --radius: 10px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  /* The app owns the viewport and scrolls internally (.sidebar, .map-wrap);
+     the page itself must never scroll, or the topbar gets dragged out of
+     view. */
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family:
+    "Segoe UI",
+    system-ui,
+    -apple-system,
+    sans-serif;
+}
+
+#app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.btn-primary {
+  width: 100%;
+  background: var(--accent);
+  color: #061021;
+  border: none;
+  padding: 11px 14px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 15px;
+  margin-top: 6px;
+}
+.btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.error-banner {
+  background: #3a1420;
+  border: 1px solid #5c1f2c;
+  color: #ffb4bf;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  margin-bottom: 12px;
+}

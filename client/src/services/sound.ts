@@ -1,23 +1,40 @@
-// Procedural WebAudio SFX — no bundled assets. Mute state persists in
-// localStorage.
+import { STORAGE_KEYS } from "../constants";
 
-const MUTE_KEY = "op_muted";
+/**
+ * Procedural WebAudio SFX — no bundled assets. Mute state persists in
+ * localStorage.
+ */
+
+interface Tone {
+  freq: number;
+  /** Seconds from `now` at which the tone starts. */
+  start: number;
+  /** Duration in seconds. */
+  duration: number;
+  type?: OscillatorType;
+  gain?: number;
+}
 
 let ctx: AudioContext | null = null;
-let muted = localStorage.getItem(MUTE_KEY) === "1";
+let muted = localStorage.getItem(STORAGE_KEYS.muted) === "1";
 
 function getCtx(): AudioContext | null {
   if (typeof window === "undefined") return null;
-  const Ctor = window.AudioContext || (window as any).webkitAudioContext;
+  const Ctor =
+    window.AudioContext ??
+    (window as Window & { webkitAudioContext?: typeof AudioContext })
+      .webkitAudioContext;
   if (!Ctor) return null;
   if (!ctx) ctx = new Ctor();
-  if (ctx.state === "suspended") ctx.resume().catch(() => {});
+  if (ctx.state === "suspended") void ctx.resume().catch(() => {});
   return ctx;
 }
 
-// Must be called from a user-gesture handler, or the browser refuses to
-// start the AudioContext.
-export function unlockAudio() {
+/**
+ * Must be called from a user-gesture handler, or the browser refuses to
+ * start the AudioContext.
+ */
+export function unlockAudio(): void {
   getCtx();
 }
 
@@ -25,9 +42,9 @@ export function isMuted(): boolean {
   return muted;
 }
 
-export function setMuted(next: boolean) {
+export function setMuted(next: boolean): void {
   muted = next;
-  localStorage.setItem(MUTE_KEY, next ? "1" : "0");
+  localStorage.setItem(STORAGE_KEYS.muted, next ? "1" : "0");
 }
 
 export function toggleMuted(): boolean {
@@ -35,15 +52,7 @@ export function toggleMuted(): boolean {
   return muted;
 }
 
-interface Tone {
-  freq: number;
-  start: number; // seconds from now
-  duration: number; // seconds
-  type?: OscillatorType;
-  gain?: number;
-}
-
-function playTones(tones: Tone[]) {
+function playTones(tones: Tone[]): void {
   if (muted) return;
   const audio = getCtx();
   if (!audio) return;

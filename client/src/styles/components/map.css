@@ -1,0 +1,137 @@
+.landmass {
+  fill: #16223d;
+  stroke: #223255;
+  stroke-width: 0.6;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.city-node {
+  cursor: pointer;
+}
+.city-node .hit-target {
+  fill: transparent;
+} /* larger invisible tap/click target */
+.city-node circle.base {
+  fill: #1c2740;
+  stroke: #3a4a6b;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  transition:
+    stroke 0.15s,
+    fill 0.15s;
+}
+.city-node.connected-hint circle.base {
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+.city-node.current circle.base {
+  fill: #24345a;
+  stroke: #fff;
+  stroke-width: 3;
+}
+.city-node.selected circle.base {
+  stroke: #fff;
+  stroke-width: 3;
+}
+
+.city-node text.label {
+  fill: var(--text);
+  font-size: 16px;
+  font-weight: 600;
+  pointer-events: none;
+  font-family: inherit;
+  opacity: 0;
+  transition: opacity 0.15s;
+  /* No transform here — the whole node counter-scales as one unit via the
+     parent .node-scale group (see map.ts applyNodeScale). */
+}
+/* Major cities always show; the rest reveal on zoom-in (see map.ts). */
+.city-node.major text.label {
+  opacity: 1;
+}
+#map-wrap.zoomed-in .city-node text.label {
+  opacity: 1;
+}
+
+.city-node.station .station-ring {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 1.5;
+  stroke-dasharray: 2 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.edge-line {
+  stroke: #2c3d63;
+  stroke-width: 1.4;
+  opacity: 0.85;
+  vector-effect: non-scaling-stroke;
+}
+.edge-line.legal {
+  stroke: var(--accent);
+  opacity: 0.9;
+}
+.edge-line.shuttle {
+  /* Long-haul wrap-around routes (LA<->Tokyo, LA<->Sydney) — dashed to read
+     as the long way round. */
+  stroke-dasharray: 7 5;
+  stroke: #6b7a9e;
+  opacity: 0.75;
+}
+.edge-line.shuttle.legal {
+  stroke: var(--accent);
+  opacity: 0.95;
+}
+
+.cube-badge {
+  font-size: 10px;
+  font-weight: 700;
+  fill: #06101f;
+}
+.pawn {
+  stroke: #061021;
+  stroke-width: 1.5;
+}
+
+.map-controls {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 15;
+}
+.map-controls button {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+}
+.map-controls button:hover {
+  border-color: var(--accent);
+}
+
+.map-hint {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  font-size: 11px;
+  color: var(--text-dim);
+  background: rgba(10, 16, 30, 0.55);
+  padding: 4px 8px;
+  border-radius: 6px;
+  pointer-events: none;
+  z-index: 15;
+}
+@media (max-width: 860px) {
+  .map-hint {
+    display: none;
+  }
+}

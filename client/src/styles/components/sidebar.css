@@ -1,0 +1,173 @@
+.sidebar {
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  overflow-y: auto;
+  min-height: 0; /* let the 1fr row win so this scrolls internally */
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  font-size: 13px;
+}
+
+.sidebar h2 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-dim);
+  margin: 0 0 8px;
+}
+
+.turn-banner {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+}
+.turn-banner .who {
+  font-weight: 700;
+  font-size: 15px;
+}
+.turn-banner .role {
+  color: var(--accent);
+  font-size: 12px;
+  margin-top: 2px;
+}
+.turn-banner .actions-left {
+  margin-top: 8px;
+  display: flex;
+  gap: 4px;
+}
+.action-pip {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: #2a3a5e;
+}
+.action-pip.filled {
+  background: var(--accent);
+}
+
+.end-turn-btn {
+  width: 100%;
+  margin-top: 10px;
+  background: var(--warn);
+  color: #221400;
+  border: none;
+  padding: 9px;
+  border-radius: 8px;
+  font-weight: 700;
+}
+.end-turn-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.disease-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.disease-chip {
+  border-radius: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.disease-chip .swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+}
+.disease-chip .state {
+  font-size: 11px;
+  color: var(--text-dim);
+  text-transform: capitalize;
+}
+.disease-chip.cured .state {
+  color: var(--good);
+}
+.disease-chip.eradicated .state {
+  color: var(--accent);
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  color: var(--text-dim);
+}
+.stat-row b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.hand-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.hand-card {
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12.5px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid var(--border);
+}
+.hand-card.epidemic {
+  background: #3a1420;
+  border-color: #5c1f2c;
+}
+.hand-card.event {
+  background: #1a2e3a;
+  border-color: #205c72;
+}
+.hand-card.event button {
+  background: #2a8fb0;
+}
+.hand-card button {
+  background: var(--danger);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 11px;
+}
+
+.players-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.player-chip {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  font-size: 12.5px;
+}
+.player-chip.active {
+  border-color: var(--accent);
+}
+.player-chip .offline-tag {
+  color: var(--danger);
+  font-size: 10px;
+}
+
+.log-list {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+  font-size: 12px;
+  color: var(--text-dim);
+}

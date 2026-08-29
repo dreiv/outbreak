@@ -1,19 +1,27 @@
-import createPanZoom, { PanZoom } from "panzoom";
+import createPanZoom, { type PanZoom } from "panzoom";
 import {
   CITIES,
   CITY_MAP,
   MAP_WIDTH,
   MAP_HEIGHT,
   isShuttleEdge,
-} from "../../shared/src/boardData";
-import type { GameState, RegionId } from "../../shared/src/types";
-import { REGION_META } from "../../shared/src/types";
-import { LAND_PATH } from "./worldLand";
+} from "../../../shared/src/boardData";
+import type { GameState, RegionId } from "../../../shared/src/types";
+import { REGION_META } from "../../../shared/src/types";
+import { LAND_PATH } from "../assets/worldLand";
+import { PLAYER_COLORS } from "../constants";
+import type { MapController } from "../types";
 
-const PLAYER_COLORS = ["#f472b6", "#facc15", "#60a5fa", "#34d399"];
-
-// Below this zoom, only "major" cities show labels (see boardData.ts).
+/** Below this zoom, only "major" cities show labels (see boardData.ts). */
 const LABEL_REVEAL_ZOOM = 1.6;
+const ZOOM_STEP = 1.5;
+const RESIZE_DEBOUNCE_MS = 150;
+
+interface City {
+  x: number;
+  y: number;
+  name: string;
+}
 
 function regionsWithCubes(
   state: GameState,
@@ -24,15 +32,16 @@ function regionsWithCubes(
   return (Object.entries(rec) as [RegionId, number][]).filter(([, n]) => n > 0);
 }
 
-function shuttleStub(
-  from: { x: number; y: number; name: string },
-  to: { x: number; y: number; name: string },
-  isLegalMove: boolean,
-): string {
-  // `from` exits toward the map edge *away* from `to`'s direct-line
-  // direction, so the wrap-around reads as the long way round.
+/**
+ * A straight line would cut across the whole map (this projection isn't
+ * Pacific-centered), so each end runs off its nearest edge to imply the
+ * route wraps around off-map. `from` exits toward the map edge *away* from
+ * `to`'s direct-line direction, so the wrap-around reads as the long way
+ * round. Both stubs end at the midpoint y so they line up across the two
+ * edges.
+ */
+function shuttleStub(from: City, to: City, isLegalMove: boolean): string {
   const edgeX = to.x > from.x ? 0 : MAP_WIDTH;
-  // Both stubs end at the midpoint y so they line up across the two edges.
   const edgeY = (from.y + to.y) / 2;
   const classes = ["edge-line", "shuttle"];
   if (isLegalMove) classes.push("legal");
@@ -42,17 +51,16 @@ function shuttleStub(
     </line>`;
 }
 
-// One-time setup: the static SVG structure and pan/zoom controller live for
-// the lifetime of the game screen. renderMap() only touches `.edges`/`.nodes`
-// so the pan/zoom instance (and the user's view) survives every state update.
-
-export interface MapController {
-  panzoom: PanZoom;
-  wrapEl: HTMLElement;
-  zoomIn: () => void;
-  zoomOut: () => void;
-  resetView: () => void;
-  destroy: () => void;
+/**
+ * Counter-scales each marker's `.node-scale` group so the whole marker stays
+ * a constant, readable size at any zoom (the standard "pin stays pin-sized"
+ * technique). Everything under it shares the city's local (0,0) origin, so
+ * nothing drifts off-position.
+ */
+function applyNodeScale(svgEl: SVGSVGElement, invZoom: number): void {
+  svgEl
+    .querySelectorAll<SVGGElement>(".node-scale")
+    .forEach((g) => g.setAttribute("transform", `scale(${invZoom})`));
 }
 
 function attachPanzoom(
@@ -94,16 +102,11 @@ function attachPanzoom(
   return instance;
 }
 
-// Counter-scales each marker's `.node-scale` group so the whole marker stays
-// a constant, readable size at any zoom (the standard "pin stays pin-sized"
-// technique). Everything under it shares the city's local (0,0) origin, so
-// nothing drifts off-position.
-function applyNodeScale(svgEl: SVGSVGElement, invZoom: number) {
-  svgEl.querySelectorAll<SVGGElement>(".node-scale").forEach((g) => {
-    g.setAttribute("transform", `scale(${invZoom})`);
-  });
-}
-
+/**
+ * One-time setup: the static SVG structure and pan/zoom controller live for
+ * the lifetime of the game screen. `renderMap()` only touches `.edges`/`.nodes`
+ * so the pan/zoom instance (and the user's view) survives every state update.
+ */
 export function initMap(
   svgEl: SVGSVGElement,
   wrapEl: HTMLElement,
@@ -124,7 +127,7 @@ export function initMap(
     return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
   };
 
-  function reinit() {
+  function reinit(): void {
     // Re-attach against a fresh viewBox to restore the fitted view (reset)
     // and re-fit after container resizes. panzoom.dispose() does NOT clear
     // the `transform` it wrote on the viewport <g>, so clear it first —
@@ -140,29 +143,25 @@ export function initMap(
   let resizeTimer: number | undefined;
   const onResize = () => {
     window.clearTimeout(resizeTimer);
-    resizeTimer = window.setTimeout(reinit, 150);
+    resizeTimer = window.setTimeout(reinit, RESIZE_DEBOUNCE_MS);
   };
   window.addEventListener("resize", onResize);
 
   return {
-    get panzoom() {
-      return panzoom;
-    },
-    wrapEl,
     zoomIn: () => {
       const c = center();
-      panzoom.smoothZoom(c.x, c.y, 1.5);
+      panzoom.smoothZoom(c.x, c.y, ZOOM_STEP);
     },
     zoomOut: () => {
       const c = center();
-      panzoom.smoothZoom(c.x, c.y, 1 / 1.5);
+      panzoom.smoothZoom(c.x, c.y, 1 / ZOOM_STEP);
     },
     resetView: reinit,
     destroy: () => {
       window.removeEventListener("resize", onResize);
       panzoom.dispose();
     },
-  } as MapController;
+  };
 }
 
 export function renderMap(
@@ -170,7 +169,7 @@ export function renderMap(
   state: GameState,
   myPlayerId: string | null,
   selectedCity: string | null,
-) {
+): void {
   const me = state.players.find((p) => p.id === myPlayerId);
   const myLocation = me?.location ?? null;
 
@@ -186,9 +185,6 @@ export function renderMap(
         myLocation != null && (city.id === myLocation || conn === myLocation);
 
       if (isShuttleEdge(city.id, conn)) {
-        // A straight line would cut across the whole map (this projection
-        // isn't Pacific-centered), so each end runs off its nearest edge to
-        // imply the route wraps around off-map.
         edgesSvg.push(shuttleStub(city, b, isLegalMove));
         edgesSvg.push(shuttleStub(b, city, isLegalMove));
         continue;
@@ -275,7 +271,7 @@ export function renderMap(
 export function attachMapClickHandler(
   svgEl: SVGSVGElement,
   onCityClick: (cityId: string, evt: MouseEvent) => void,
-) {
+): void {
   svgEl.addEventListener("click", (evt) => {
     const target = (evt.target as Element).closest(
       ".city-node",
