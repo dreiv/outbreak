@@ -58,6 +58,7 @@ function buildGameShellOnce(el: HTMLElement): void {
         </div>
         <div class="map-hint">Scroll / pinch to zoom · drag to pan</div>
       </div>
+      <div class="draw-toast" id="draw-toast" style="display:none;"></div>
       <aside class="sidebar" id="sidebar"></aside>
     </div>
     <div class="discard-overlay" id="discard-overlay" style="display:none;"></div>
@@ -164,6 +165,8 @@ function renderForecastIfNeeded(el: HTMLElement): void {
   if (!state || !myId) return;
   if (!state.pendingForecast || state.pendingForecast.playerId !== myId) {
     forecastOrder = null;
+    overlay.style.display = "none";
+    overlay.innerHTML = "";
     return;
   }
   if (!forecastOrder) forecastOrder = state.pendingForecast.cities.slice();
@@ -280,7 +283,11 @@ export function renderGameScreen(el: HTMLElement): void {
     dispatch,
   );
   renderForecastIfNeeded(el);
-  renderGameOver(el.querySelector("#gameover-overlay") as HTMLElement, state);
+  renderGameOver(
+    el.querySelector("#gameover-overlay") as HTMLElement,
+    state,
+    myId,
+  );
   renderConnStatus(el);
   renderErrorToast(el);
 }

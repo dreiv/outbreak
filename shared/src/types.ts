@@ -160,6 +160,10 @@ export interface GameState {
   // Forecast: top-of-deck cities revealed (draw order, [0] drawn next) for
   // the acting player to rearrange before it's applied.
   pendingForecast: { playerId: string; cities: string[] } | null;
+  // How many of the active player's turn actions can be undone (0 = none).
+  undoCount: number;
+  // Bumped each time a finished game is restarted, so clients can detect it.
+  restartNonce: number;
 }
 
 export interface LogEntry {
@@ -190,12 +194,14 @@ export type PlayerAction =
   | { type: "discover-cure"; region: RegionId; cardUids: string[] }
   | { type: "discard"; cardUid: string }
   | { type: "end-turn" }
+  | { type: "undo" }
   | { type: "play-government-grant"; cardUid: string; city: string }
   | { type: "play-airlift"; cardUid: string; playerId: string; to: string }
   | { type: "play-forecast"; cardUid: string }
   | { type: "resolve-forecast"; order: string[] }
   | { type: "play-resilient-population"; cardUid: string; cityId: string }
-  | { type: "play-one-quiet-night"; cardUid: string };
+  | { type: "play-one-quiet-night"; cardUid: string }
+  | { type: "restart-game" };
 
 export type ClientMessage =
   | { type: "join_room"; roomId: string; playerName: string; playerId?: string }

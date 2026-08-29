@@ -10,6 +10,7 @@ import type { GameState, RegionId } from "../../../shared/src/types";
 import { REGION_META } from "../../../shared/src/types";
 import { LAND_PATH } from "../assets/worldLand";
 import { PLAYER_COLORS } from "../constants";
+import { roleGlyph } from "./labels";
 import type { MapController } from "../types";
 
 /** Below this zoom, only "major" cities show labels (see boardData.ts). */
@@ -17,10 +18,33 @@ const LABEL_REVEAL_ZOOM = 1.6;
 const ZOOM_STEP = 1.5;
 const RESIZE_DEBOUNCE_MS = 150;
 
+/** Mouse-edge auto-pan tuning (see initMap). */
+const EDGE_PAN_THRESHOLD = 48; // px from a map edge before auto-pan engages
+const EDGE_PAN_MAX_SPEED = 900; // px/s at full depth (cursor on the edge)
+
 interface City {
   x: number;
   y: number;
   name: string;
+}
+
+/**
+ * A small human/figure pawn (head + shoulders) in the player's seat color,
+ * with a role glyph so players are distinguishable beyond color alone.
+ */
+function pawnFigure(
+  color: string,
+  glyph: string,
+  px: number,
+  py: number,
+  extraClass = "",
+): string {
+  return `
+    <g class="pawn-figure${extraClass}" transform="translate(${px} ${py})">
+      <circle class="pawn-head" cx="0" cy="-3.5" r="2.6" fill="${color}" stroke="#061021" stroke-width="1" />
+      <path class="pawn-body" d="M -3.5 6 Q -3.5 0.5 0 0.5 Q 3.5 0.5 3.5 6 Z" fill="${color}" stroke="#061021" stroke-width="1" />
+      <text class="pawn-glyph" x="0" y="4.2" text-anchor="middle">${glyph}</text>
+    </g>`;
 }
 
 function regionsWithCubes(
@@ -147,6 +171,78 @@ export function initMap(
   };
   window.addEventListener("resize", onResize);
 
+  // --- mouse-edge auto-pan -------------------------------------------
+  // Pushing the cursor to the map's screen edge pans the camera that way.
+  // Speed eases in (ramps up) as the cursor goes deeper into the edge zone so
+  // movement is smooth rather than a sudden jump, and panzoom's bounds clamp
+  // keeps the map from panning off-view. Disabled while the user drags.
+  let edgePanRaf: number | null = null;
+  let edgePanLastTs = 0;
+  let edgePanActive = false;
+  let edgePanX = 0;
+  let edgePanY = 0;
+
+  function edgePanFrame(ts: number): void {
+    if (!edgePanActive) return;
+    const dt = edgePanLastTs ? (ts - edgePanLastTs) / 1000 : 0;
+    edgePanLastTs = ts;
+    const rect = wrapEl.getBoundingClientRect();
+    const dLeft = edgePanX - rect.left;
+    const dRight = rect.right - edgePanX;
+    const dTop = edgePanY - rect.top;
+    const dBottom = rect.bottom - edgePanY;
+
+    let dx = 0;
+    let dy = 0;
+    if (dLeft < EDGE_PAN_THRESHOLD)
+      dx +=
+        EDGE_PAN_MAX_SPEED *
+        ((EDGE_PAN_THRESHOLD - dLeft) / EDGE_PAN_THRESHOLD);
+    if (dRight < EDGE_PAN_THRESHOLD)
+      dx -=
+        EDGE_PAN_MAX_SPEED *
+        ((EDGE_PAN_THRESHOLD - dRight) / EDGE_PAN_THRESHOLD);
+    if (dTop < EDGE_PAN_THRESHOLD)
+      dy +=
+        EDGE_PAN_MAX_SPEED * ((EDGE_PAN_THRESHOLD - dTop) / EDGE_PAN_THRESHOLD);
+    if (dBottom < EDGE_PAN_THRESHOLD)
+      dy -=
+        EDGE_PAN_MAX_SPEED *
+        ((EDGE_PAN_THRESHOLD - dBottom) / EDGE_PAN_THRESHOLD);
+
+    if (dx !== 0 || dy !== 0) panzoom.moveBy(dx * dt, dy * dt, false);
+    edgePanRaf = requestAnimationFrame(edgePanFrame);
+  }
+
+  function startEdgePan(): void {
+    if (edgePanActive) return;
+    edgePanActive = true;
+    edgePanLastTs = 0;
+    edgePanRaf = requestAnimationFrame(edgePanFrame);
+  }
+
+  function stopEdgePan(): void {
+    edgePanActive = false;
+    if (edgePanRaf !== null) {
+      cancelAnimationFrame(edgePanRaf);
+      edgePanRaf = null;
+    }
+  }
+
+  function onEdgePanMove(e: MouseEvent): void {
+    if (e.buttons !== 0) {
+      // Manual drag in progress — let panzoom own the pan.
+      stopEdgePan();
+      return;
+    }
+    edgePanX = e.clientX;
+    edgePanY = e.clientY;
+    startEdgePan();
+  }
+
+  wrapEl.addEventListener("mousemove", onEdgePanMove);
+  wrapEl.addEventListener("mouseleave", stopEdgePan);
+
   return {
     zoomIn: () => {
       const c = center();
@@ -159,6 +255,9 @@ export function initMap(
     resetView: reinit,
     destroy: () => {
       window.removeEventListener("resize", onResize);
+      wrapEl.removeEventListener("mousemove", onEdgePanMove);
+      wrapEl.removeEventListener("mouseleave", stopEdgePan);
+      stopEdgePan();
       panzoom.dispose();
     },
   };
@@ -231,13 +330,18 @@ export function renderMap(
       : "";
 
     const playersHere = state.players.filter((p) => p.location === city.id);
+    const activePlayerId =
+      state.phase === "playing"
+        ? state.turnOrder[state.currentPlayerIndex]
+        : null;
     const pawns = playersHere
       .map((p, i) => {
         const idx = state.players.findIndex((pl) => pl.id === p.id);
         const color = PLAYER_COLORS[idx % PLAYER_COLORS.length];
-        const px = -11 + i * 7.5;
-        const py = 13;
-        return `<circle class="pawn" cx="${px}" cy="${py}" r="3.8" fill="${color}" />`;
+        const px = -12 + i * 9;
+        const py = 14;
+        const active = p.id === activePlayerId ? " active" : "";
+        return pawnFigure(color, roleGlyph(p.role), px, py, active);
       })
       .join("");
 

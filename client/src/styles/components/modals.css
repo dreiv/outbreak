@@ -8,11 +8,36 @@
   z-index: 50;
 }
 .discard-modal {
+  position: relative;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 20px;
   width: min(420px, 92vw);
+}
+.discard-modal .close-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    color 0.15s;
+}
+.discard-modal .close-btn:hover {
+  border-color: var(--accent);
+  color: var(--text);
 }
 .discard-modal h3 {
   margin-top: 0;
@@ -225,4 +250,26 @@
   color: var(--text-dim);
   text-transform: uppercase;
   letter-spacing: 0.4px;
+}
+.go-actions {
+  display: flex;
+  gap: 10px;
+}
+.go-actions .btn-primary {
+  flex: 1;
+  margin-top: 0;
+}
+.btn-ghost {
+  flex: 1;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 11px 14px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+}
+.btn-ghost:hover {
+  background: var(--panel-2);
 }

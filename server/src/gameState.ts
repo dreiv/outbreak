@@ -40,6 +40,7 @@ export interface RoomInternal {
   playerDeck: PlayerCard[];
   infectionDeck: string[]; // index 0 = bottom, last = top
   freeMoveUsed: Set<string>; // logistics-chief per-turn tracker
+  undoStack: GameState[]; // per-turn undo history (cleared when cards are drawn)
 }
 
 export interface Room {
@@ -99,6 +100,8 @@ export function createRoom(roomId: string): Room {
     epidemicCount: DEFAULT_EPIDEMIC_COUNT,
     oneQuietNightActive: false,
     pendingForecast: null,
+    undoCount: 0,
+    restartNonce: 0,
   };
   return { state, internal: null };
 }
@@ -109,6 +112,7 @@ export function setEpidemicCount(room: Room, count: number): string | null {
   if (room.state.phase !== "lobby")
     return "Difficulty can only be changed before the game starts.";
   room.state.epidemicCount = normalizeEpidemicCount(count);
+  room.state.restartNonce = 0;
   return null;
 }
 
@@ -160,6 +164,7 @@ export function startGame(room: Room): string | null {
     playerDeck: [],
     infectionDeck,
     freeMoveUsed: new Set(),
+    undoStack: [],
   };
   for (const amount of [3, 2, 1]) {
     for (let i = 0; i < 3; i++) {
@@ -190,10 +195,7 @@ export function startGame(room: Room): string | null {
     }
   }
   const epidemicCount = normalizeEpidemicCount(state.epidemicCount);
-  const piles: PlayerCard[][] = Array.from(
-    { length: epidemicCount },
-    () => [],
-  );
+  const piles: PlayerCard[][] = Array.from({ length: epidemicCount }, () => []);
   regularCards.forEach((card, i) => piles[i % epidemicCount].push(card));
   const deckWithEpidemics: PlayerCard[] = [];
   for (const pile of piles) {
@@ -384,8 +386,12 @@ function finishTurn(room: Room) {
 }
 
 function endOfActions(room: Room) {
-  const { state } = room;
+  const { state, internal } = room;
   drawPlayerCards(room);
+  if (internal) {
+    internal.undoStack = []; // turn's actions are committed — no more undo
+    state.undoCount = 0;
+  }
   if (isLost(state) || state.phase === "won") return;
   if (state.pendingDiscard) return; // wait for the discard before infecting
   finishTurn(room);
@@ -472,12 +478,60 @@ function eventCardUid(action: PlayerAction): string | null {
   }
 }
 
+// Deterministic turn actions that can be undone (no random draws involved).
+const UNDOABLE_ACTIONS = new Set([
+  "drive",
+  "direct-flight",
+  "charter-flight",
+  "shuttle-flight",
+  "treat",
+  "build-station",
+  "share-knowledge",
+  "discover-cure",
+]);
+
+const UNDO_STACK_MAX = 10;
+
+function pushUndoSnapshot(room: Room): void {
+  const { state, internal } = room;
+  if (!internal) return;
+  internal.undoStack.push(JSON.parse(JSON.stringify(state)));
+  if (internal.undoStack.length > UNDO_STACK_MAX) internal.undoStack.shift();
+  state.undoCount = internal.undoStack.length;
+}
+
 export function applyAction(
   room: Room,
   playerId: string,
   action: PlayerAction,
 ): string | null {
   const { state, internal } = room;
+  if (action.type === "restart-game") {
+    if (state.phase !== "won" && state.phase !== "lost")
+      return "The game is still in progress.";
+    // Preserve the seated players (identity + connection) but reset their
+    // in-game state; startGame re-assigns roles and deals hands.
+    const seated = state.players.map((p) => ({
+      id: p.id,
+      name: p.name,
+      role: null,
+      location: STARTING_CITY,
+      hand: [],
+      connected: p.connected,
+    }));
+    room.state = createRoom(room.state.roomId).state;
+    room.state.players = seated;
+    room.state.restartNonce = (room.state.restartNonce ?? 0) + 1;
+    room.state.epidemicCount = normalizeEpidemicCount(room.state.epidemicCount);
+    room.internal = {
+      playerDeck: [],
+      infectionDeck: [],
+      freeMoveUsed: new Set(),
+      undoStack: [],
+    };
+    log(room.state, "A new game is ready. Press Start Game to begin.");
+    return null;
+  }
   if (state.phase !== "playing") return "Game is not in progress.";
   if (!internal) return "Game not initialized.";
   const player = state.players.find((p) => p.id === playerId);
@@ -621,6 +675,8 @@ export function applyAction(
   if (!isTurn) return "It is not your turn.";
   if (state.pendingDiscard)
     return "A discard is pending before the game can continue.";
+
+  if (UNDOABLE_ACTIONS.has(action.type)) pushUndoSnapshot(room);
 
   switch (action.type) {
     case "end-turn": {
@@ -807,6 +863,15 @@ export function applyAction(
       );
       checkWin(state);
       break;
+    }
+    case "undo": {
+      const snapshot = internal.undoStack.pop();
+      if (!snapshot) return "Nothing to undo.";
+      const actorName = player.name;
+      room.state = snapshot;
+      room.state.undoCount = internal.undoStack.length;
+      log(room.state, `${actorName} undid their last action.`);
+      return null;
     }
     default:
       return "Unknown action.";

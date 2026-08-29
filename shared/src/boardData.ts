@@ -306,7 +306,7 @@ const RAW_CITIES: RawCity[] = [
   {
     id: "sydney",
     name: "Sydney",
-    region: "verdant",
+    region: "crimson",
     lat: -33.8688,
     lon: 151.2093,
     major: true,

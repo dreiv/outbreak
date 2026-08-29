@@ -1,5 +1,6 @@
 import { CITY_MAP } from "../../../../shared/src/boardData";
 import type { GameState } from "../../../../shared/src/types";
+import { REGION_META } from "../../../../shared/src/types";
 import { escapeHtml } from "../../utils/escape";
 import type { Dispatch } from "../../types";
 
@@ -24,7 +25,8 @@ export function renderForecastOverlay(
   const rows = order
     .map(
       (cityId, i) => `
-      <div class="hand-card">
+      <div class="hand-card region-${CITY_MAP[cityId].region}">
+        <span class="region-dot" style="background:${REGION_META[CITY_MAP[cityId].region].color}"></span>
         <span>${i + 1}. ${escapeHtml(CITY_MAP[cityId].name)}</span>
         <span>
           <button data-dir="up" data-idx="${i}" ${i === 0 ? "disabled" : ""} aria-label="Move up">↑</button>
@@ -37,6 +39,7 @@ export function renderForecastOverlay(
   el.style.display = "flex";
   el.innerHTML = `
     <div class="discard-modal">
+      <button class="close-btn" id="forecast-close" aria-label="Close">✕</button>
       <h3>🔮 Forecast</h3>
       <p class="modal-hint">Top of the Infection Deck, in draw order (1 = drawn next). Reorder as you like, then confirm.</p>
       <div class="hand-list">${rows}</div>
@@ -53,7 +56,9 @@ export function renderForecastOverlay(
       setOrder(next);
     });
   });
-  el.querySelector("#forecast-confirm")?.addEventListener("click", () => {
-    dispatch({ type: "resolve-forecast", order });
-  });
+  const confirm = () => dispatch({ type: "resolve-forecast", order });
+  el.querySelector("#forecast-confirm")?.addEventListener("click", confirm);
+  // A Forecast must be resolved once played, so closing accepts the current
+  // order (there is no "un-play" in the physical game).
+  el.querySelector("#forecast-close")?.addEventListener("click", confirm);
 }

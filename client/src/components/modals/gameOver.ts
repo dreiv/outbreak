@@ -1,10 +1,15 @@
 import type { GameState, RegionId } from "../../../../shared/src/types";
 import { REGION_META } from "../../../../shared/src/types";
+import { dispatch } from "../../state/appState";
 
 /**
  * End-of-game overlay shown when the phase reaches "won" or "lost".
  */
-export function renderGameOver(el: HTMLElement, state: GameState): void {
+export function renderGameOver(
+  el: HTMLElement,
+  state: GameState,
+  myId: string | null,
+): void {
   if (state.phase !== "won" && state.phase !== "lost") {
     el.style.display = "none";
     el.innerHTML = "";
@@ -51,11 +56,17 @@ export function renderGameOver(el: HTMLElement, state: GameState): void {
         <div class="go-stat"><b>${state.epidemicsResolved}</b><span>epidemics</span></div>
       </div>
 
-      <button class="btn-primary" id="gameover-return">Return to Lobby</button>
+      <div class="go-actions">
+        <button class="btn-primary" id="gameover-restart">Restart Game</button>
+        <button class="btn-ghost" id="gameover-menu">Main Menu</button>
+      </div>
     </div>
   `;
 
-  el.querySelector("#gameover-return")?.addEventListener("click", () => {
+  el.querySelector("#gameover-restart")?.addEventListener("click", () => {
+    if (myId) dispatch({ type: "restart-game" });
+  });
+  el.querySelector("#gameover-menu")?.addEventListener("click", () => {
     location.reload();
   });
 }

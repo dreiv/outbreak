@@ -89,9 +89,25 @@
   font-weight: 700;
   fill: #06101f;
 }
-.pawn {
+.pawn-figure .pawn-head,
+.pawn-figure .pawn-body {
   stroke: #061021;
-  stroke-width: 1.5;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.pawn-figure.active .pawn-head,
+.pawn-figure.active .pawn-body {
+  stroke: #ffffff;
+  stroke-width: 1.6;
+}
+.pawn-figure.active .pawn-glyph {
+  fill: #ffffff;
+}
+.pawn-glyph {
+  font-size: 4.5px;
+  font-weight: 700;
+  fill: #061021;
+  pointer-events: none;
 }
 
 .map-controls {

@@ -136,7 +136,8 @@ function handleServerMessage(msg: ServerMessage): void {
   if (didStateUpdate && gameState && screen === "game") {
     const svg = document.getElementById("board-svg") as SVGSVGElement | null;
     const banner = document.getElementById("fx-banner") as HTMLElement | null;
-    if (svg && banner) runEffects(svg, banner, prevState, gameState);
+    if (svg && banner)
+      runEffects(svg, banner, prevState, gameState, myPlayerId);
     if (prevState && prevState.phase === "playing" && gameState.phase === "won")
       sound.win();
     if (

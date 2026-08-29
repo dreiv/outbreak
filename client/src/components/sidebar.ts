@@ -7,9 +7,17 @@ import type {
 } from "../../../shared/src/types";
 import { REGION_META } from "../../../shared/src/types";
 import { escapeHtml } from "../utils/escape";
-import { ACTIONS_PER_TURN, LOG_VISIBLE_ENTRIES } from "../constants";
+import {
+  ACTIONS_PER_TURN,
+  LOG_VISIBLE_ENTRIES,
+  RESEARCH_STATION_MAX,
+} from "../constants";
 import type { Dispatch } from "../types";
 import { eventName, roleDesc, roleLabel } from "./labels";
+
+// Tracks the newest log entry so the activity log auto-scrolls only when a
+// new line lands (not on every unrelated re-render).
+let lastNewestLogId: string | null = null;
 
 function handCardHtml(c: PlayerCard): string {
   if (c.type === "epidemic") {
@@ -18,7 +26,8 @@ function handCardHtml(c: PlayerCard): string {
   if (c.type === "event") {
     return `<div class="hand-card event"><span>🃏 ${escapeHtml(eventName(c.event))}</span><button class="play-event-btn" data-uid="${c.uid}" data-event="${c.event}">Play</button></div>`;
   }
-  return `<div class="hand-card"><span>${CITY_MAP[c.city].name}</span></div>`;
+  const region = CITY_MAP[c.city].region;
+  return `<div class="hand-card region-${region}"><span class="region-dot" style="background:${REGION_META[region].color}"></span><span>${CITY_MAP[c.city].name}</span></div>`;
 }
 
 /**
@@ -80,10 +89,11 @@ export function renderSidebar(
   el.innerHTML = `
     <section>
       <h2>Status</h2>
-      <div class="turn-banner">
-        <div class="who">${current ? escapeHtml(current.name) : "—"}${isMyTurn ? " (your turn)" : ""}</div>
+      <div class="turn-banner ${isMyTurn ? "mine" : "theirs"}">
+        <div class="who">${current ? escapeHtml(current.name) : "—"}${isMyTurn ? " (your turn)" : state.phase === "playing" ? " is playing…" : ""}</div>
         <div class="role">${current ? roleLabel(current.role) : ""}</div>
         <div class="actions-left">${pips}</div>
+        <button class="undo-btn" id="undo-btn" ${isMyTurn && state.phase === "playing" && state.undoCount > 0 ? "" : "disabled"}>Undo</button>
         <button class="end-turn-btn" id="end-turn-btn" ${isMyTurn && state.phase === "playing" ? "" : "disabled"}>End Turn</button>
       </div>
     </section>
@@ -105,7 +115,7 @@ export function renderSidebar(
       <h2>Board</h2>
       <div class="stat-row"><span>Outbreaks</span><b>${state.outbreakCounter} / ${state.outbreakMax}</b></div>
       <div class="stat-row"><span>Infection rate</span><b>${state.infectionRate}</b></div>
-      <div class="stat-row"><span>Research stations</span><b>${state.researchStations.length}</b></div>
+      <div class="stat-row"><span>Research stations</span><b>${state.researchStations.length} placed · ${RESEARCH_STATION_MAX - state.researchStations.length} left</b></div>
       <div class="stat-row"><span>Player deck</span><b>${state.playerDeckSize} left</b></div>
       <div class="stat-row"><span>Infection deck</span><b>${state.infectionDeckSize} left</b></div>
       <div class="stat-row"><span>Epidemics resolved</span><b>${state.epidemicsResolved} / ${state.epidemicCount}</b></div>
@@ -131,6 +141,9 @@ export function renderSidebar(
   el.querySelector("#end-turn-btn")?.addEventListener("click", () =>
     dispatch({ type: "end-turn" }),
   );
+  el.querySelector("#undo-btn")?.addEventListener("click", () =>
+    dispatch({ type: "undo" }),
+  );
   el.querySelectorAll<HTMLButtonElement>(".play-event-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       const uid = btn.dataset.uid;
@@ -138,4 +151,13 @@ export function renderSidebar(
       if (uid && event) onPlayEvent(uid, event as EventId);
     });
   });
+
+  // Auto-scroll the activity log to the newest entry when a new one lands.
+  const logList = el.querySelector(".log-list") as HTMLElement | null;
+  const newestLogId =
+    state.log.length > 0 ? state.log[state.log.length - 1].id : "";
+  if (logList && newestLogId !== lastNewestLogId) {
+    logList.scrollTop = logList.scrollHeight;
+  }
+  lastNewestLogId = newestLogId;
 }

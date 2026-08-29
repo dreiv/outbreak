@@ -1,7 +1,14 @@
 import { CITY_MAP } from "../../../shared/src/boardData";
-import type { CityDef, GameState, RegionId } from "../../../shared/src/types";
+import type {
+  CityDef,
+  GameState,
+  PlayerCard,
+  RegionId,
+} from "../../../shared/src/types";
 import { REGION_META } from "../../../shared/src/types";
 import { sound } from "../services/sound";
+import { escapeHtml } from "../utils/escape";
+import { eventName } from "./labels";
 
 const REGION_IDS = new Set<string>(Object.keys(REGION_META));
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -9,6 +16,9 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 const PULSE_LIFETIME_MS = { infect: 650, outbreak: 900 } as const;
 const TRAVEL_LIFETIME_MS = 750;
 const BANNER_LIFETIME_MS = 1700;
+const DRAW_TOAST_LIFETIME_MS = 2600;
+
+let drawToastTimer: number | null = null;
 
 function el<K extends keyof SVGElementTagNameMap>(
   tag: K,
@@ -151,6 +161,7 @@ export function runEffects(
   bannerEl: HTMLElement,
   prev: GameState | null,
   next: GameState,
+  myId: string | null,
 ): void {
   const fx = svgEl.querySelector(".fx");
   if (!fx || !prev || prev.roomId !== next.roomId) return;
@@ -214,4 +225,62 @@ export function runEffects(
   } else if (anyInfect) {
     sound.infection();
   }
+
+  // --- reveal cards drawn into the local player's hand ---------------
+  revealDrawnCards(prev, next, myId);
+}
+
+function cardLabel(c: PlayerCard): string {
+  if (c.type === "epidemic") return "⚠️ Epidemic";
+  if (c.type === "event") return `🃏 ${eventName(c.event)}`;
+  return CITY_MAP[c.city].name;
+}
+
+/**
+ * Briefly reveals the cards the local player just drew (by uid diff), so a
+ * draw is visible rather than silently landing in the hand. Skipped when any
+ * hand shrank (a share-knowledge "take" also grows a hand) and for epidemic
+ * draws (already surfaced by the Epidemic banner).
+ */
+function revealDrawnCards(
+  prev: GameState,
+  next: GameState,
+  myId: string | null,
+): void {
+  if (!myId) return;
+  const prevMe = prev.players.find((p) => p.id === myId);
+  const me = next.players.find((p) => p.id === myId);
+  if (!prevMe || !me) return;
+
+  const prevUids = new Set(prevMe.hand.map((c) => c.uid));
+  const drawn = me.hand.filter((c) => !prevUids.has(c.uid));
+  if (drawn.length === 0) return;
+
+  // A "take" grows the receiver's hand while shrinking the giver's — don't
+  // toast that as a draw.
+  const anyShrank = next.players.some(
+    (p) =>
+      prev.players.find((pl) => pl.id === p.id)!.hand.length > p.hand.length,
+  );
+  if (anyShrank) return;
+
+  const labels = drawn.map(cardLabel);
+  showDrawToast(labels);
+}
+
+function showDrawToast(labels: string[]): void {
+  const toast = document.getElementById("draw-toast");
+  if (!toast) return;
+  toast.innerHTML =
+    `<span class="draw-toast-label">🃏 Drew</span>` +
+    labels
+      .map((l) => `<span class="draw-toast-card">${escapeHtml(l)}</span>`)
+      .join("");
+  toast.style.display = "flex";
+  if (drawToastTimer !== null) window.clearTimeout(drawToastTimer);
+  drawToastTimer = window.setTimeout(() => {
+    toast.style.display = "none";
+    toast.innerHTML = "";
+    drawToastTimer = null;
+  }, DRAW_TOAST_LIFETIME_MS);
 }

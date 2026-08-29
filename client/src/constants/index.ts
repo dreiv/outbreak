@@ -41,6 +41,12 @@ export const REGION_LEGEND: Record<RegionId, { label: string; color: string }> =
 /** Number of action pips rendered in the turn banner. */
 export const ACTIONS_PER_TURN = 4;
 
+/**
+ * Maximum research stations buildable in a game (matches the physical game's
+ * six station tokens). Used only for the sidebar counter display.
+ */
+export const RESEARCH_STATION_MAX = 6;
+
 /** How many log lines the sidebar keeps visible. */
 export const LOG_VISIBLE_ENTRIES = 40;
 
